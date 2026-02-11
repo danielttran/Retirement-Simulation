@@ -1,0 +1,5 @@
+{
+  "name": "Strategy Lab - Retirement Simulator",
+  "description": "A premium Monte Carlo simulation tool for retirement planning, featuring bucket strategies and custom asset allocation analysis.",
+  "requestFramePermissions": []
+}
