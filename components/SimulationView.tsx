@@ -2,17 +2,20 @@ import React, { useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from 'recharts';
 import { SimulationInputs, SimulationResult, StrategyType, AuditRow } from '../types';
 
-interface SimulationViewProps {
-  inputs: SimulationInputs;
-  results: SimulationResult;
-  selectedStrategy: StrategyType;
-  setSelectedStrategy: (s: StrategyType) => void;
-  onEdit: () => void;
-  onRun: () => void;
-  onCustomAllocationChange: (alloc: number) => void;
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    name: string;
+    value: number | string;
+    color: string;
+    payload?: any;
+    dataKey?: string | number;
+  }>;
+  label?: string | number;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+// Typed tooltip props
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xl min-w-[200px]">
@@ -21,13 +24,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <p className="text-sm font-bold text-slate-800">{label}</p>
         </div>
         <div className="space-y-1">
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <div key={index} className="flex justify-between items-center gap-4">
               <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: entry.color }}>
                 {entry.name}
               </span>
               <span className="text-xs font-bold text-slate-700">
-                {entry.value !== null ? `$${entry.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
+                {entry.value !== null && typeof entry.value === 'number' 
+                  ? `$${entry.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
+                  : 'Depleted'}
               </span>
             </div>
           ))}
@@ -37,6 +42,16 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   }
   return null;
 };
+
+interface SimulationViewProps {
+  inputs: SimulationInputs;
+  results: SimulationResult;
+  selectedStrategy: StrategyType;
+  setSelectedStrategy: (s: StrategyType) => void;
+  onEdit: () => void;
+  onRun: () => void;
+  onCustomAllocationChange: (alloc: number) => void;
+}
 
 const SimulationView: React.FC<SimulationViewProps> = ({ 
   inputs, 

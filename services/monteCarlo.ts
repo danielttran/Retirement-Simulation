@@ -2,8 +2,9 @@ import { SimulationInputs, SimulationResult, StrategyType, YearResult, AuditRow 
 
 // 1. CONFIGURATION & CONSTANTS
 
+const TRANSACTION_COST = 0.0005; // 0.05% friction on selling/rebalancing
+
 // Nominal Return Assumptions (Long-term historical averages)
-// We will adjust these dynamically based on the user's inflation input to get Real Returns.
 const NOMINAL_ASSUMPTIONS = {
   STOCK: { mean: 0.085, stdDev: 0.17 }, // ~8.5% Nominal, 17% Vol
   BOND:  { mean: 0.040, stdDev: 0.05 }, // ~4.0% Nominal, 5% Vol
@@ -11,18 +12,16 @@ const NOMINAL_ASSUMPTIONS = {
 };
 
 // Correlation Matrix (Stocks, Bonds, Cash)
-// Modern correlation assumption: Stocks/Bonds have slight negative correlation
 const CORRELATION_MATRIX = [
   [1.00, -0.15, 0.05],  // Stock-Stock, Stock-Bond, Stock-Cash
   [-0.15, 1.00, 0.15],  // Bond-Stock, Bond-Bond, Bond-Cash
   [0.05, 0.15, 1.00],   // Cash-Stock, Cash-Bond, Cash-Cash
 ];
 
-const NUM_SIMULATIONS = 10000; // Updated to match UI claim
+const NUM_SIMULATIONS = 10000; 
 
 // 2. MATHEMATICAL HELPERS
 
-// Box-Muller transform for standard normal distribution (Mean 0, StdDev 1)
 function randn_bm() {
   let u = 0, v = 0;
   while (u === 0) u = Math.random();
@@ -30,7 +29,7 @@ function randn_bm() {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
-// Cholesky Decomposition to turn Correlation Matrix into Lower Triangular Matrix (L)
+// Cholesky Decomposition
 function choleskyDecompose(matrix: number[][]): number[][] {
   const n = matrix.length;
   const L = Array.from({ length: n }, () => Array(n).fill(0));
@@ -46,31 +45,23 @@ function choleskyDecompose(matrix: number[][]): number[][] {
   return L;
 }
 
-// Pre-compute L since Correlation Matrix is constant
 const CHOL_L = choleskyDecompose(CORRELATION_MATRIX);
 
 /**
- * Generates correlated log-normal returns for Stock, Bond, Cash
- * @param realAssumptions - The expected REAL return (Mean) and StdDev for each asset
+ * Generates correlated log-normal returns
  */
 function generateAnnualReturns(realAssumptions: typeof NOMINAL_ASSUMPTIONS) {
-  // 1. Generate 3 independent standard normal random variables
   const Z = [randn_bm(), randn_bm(), randn_bm()];
 
-  // 2. Apply Cholesky matrix to correlate them
-  // correlated_Z = L * Z
   const Z_corr = [
     CHOL_L[0][0] * Z[0],
     CHOL_L[1][0] * Z[0] + CHOL_L[1][1] * Z[1],
     CHOL_L[2][0] * Z[0] + CHOL_L[2][1] * Z[1] + CHOL_L[2][2] * Z[2]
   ];
 
-  // 3. Convert to Log-Normal Returns
-  // Formula: Return = exp(mu_log + sigma_log * Z) - 1
-  // We first convert Arithmetic Mean/StdDev to Log-Normal Parameters
   const getLogParams = (arithMean: number, arithStd: number) => {
-    // 1 + r
-    const term = 1 + arithMean;
+    // CLAMPING FIX: Ensure term is positive to avoid NaN on high inflation
+    const term = Math.max(1 + arithMean, 0.0001);
     const phi = Math.sqrt((arithStd * arithStd) + (term * term));
     const mu_log = Math.log(term * term / phi);
     const sigma_log = Math.sqrt(Math.log(phi * phi / (term * term)));
@@ -93,9 +84,9 @@ function generateAnnualReturns(realAssumptions: typeof NOMINAL_ASSUMPTIONS) {
 interface SimulationRun {
   id: number;
   finalBalance: number;
-  trajectory: number[];
+  trajectory: Float64Array; // Memory Optimization
   annualReturns: { stock: number; bond: number; cash: number }[];
-  portfolioReturns: number[]; // Track annual portfolio performance for volatility calc
+  portfolioReturns: number[]; 
 }
 
 interface SimState {
@@ -122,17 +113,15 @@ const simulateYear = (
 ): YearOutcome => {
   const { managementFee } = inputs;
   const isBucketStrategy = strategy === 'BUCKET';
-  const startTotal = state.stock + state.bond + state.cash;
-
-  // 1. Apply Market Returns (Log-Normal Correlated)
+  
+  // 1. Apply Market Returns
   const grossStock = state.stock * (1 + returns.stock);
   const grossBond = state.bond * (1 + returns.bond);
   const grossCash = state.cash * (1 + returns.cash);
   
   const growth = (grossStock - state.stock) + (grossBond - state.bond) + (grossCash - state.cash);
 
-  // 2. Apply Fees (Advisory fee applies to invested assets: Stocks + Bonds)
-  // We deduct this at year end before rebalancing
+  // 2. Apply Management Fees (Standardized: Deduct from invested assets before withdrawal)
   const feeRate = managementFee / 100;
   const stockFee = grossStock * feeRate;
   const bondFee = grossBond * feeRate;
@@ -144,8 +133,6 @@ const simulateYear = (
   const fees = stockFee + bondFee;
 
   // 3. Determine Withdrawal
-  // Note: We are working in REAL dollars, so 'spend' is constant purchasing power.
-  // We do not inflate the spend amount because returns are already deflated.
   const totalAvailable = currStock + currBond + currCash;
   const actualWithdrawal = Math.min(state.spend, totalAvailable);
 
@@ -158,39 +145,41 @@ const simulateYear = (
   } else {
     if (isBucketStrategy) {
       // --- BUCKET STRATEGY ---
-      // Target Buffer is 2 years of spending (Real Dollars)
       const targetBuffer = 2 * state.spend; 
-      
       let refillAmount = 0;
       
       // Rule: If Stocks are UP, sell gains to refill cash bucket
       if (returns.stock > 0 && currStock > 0 && currCash < targetBuffer) {
         const needed = targetBuffer - currCash;
-        // Don't sell more than the gain? Or sell principal? 
-        // Aggressive bucket strategy: Sell whatever is needed from stocks to fill bucket if market is up.
-        refillAmount = Math.min(needed, currStock);
-        currStock -= refillAmount;
-        currCash += refillAmount;
+        // Sell stock to fill bucket. Apply transaction cost to the sale.
+        const grossSell = Math.min(needed, currStock);
+        const netCashReceived = grossSell * (1 - TRANSACTION_COST); // Drag applied
+        
+        currStock -= grossSell;
+        currCash += netCashReceived;
+        refillAmount = netCashReceived;
       }
 
       // Spend Logic: Always try to spend from Cash first
-      let spendFromCash = 0;
       if (currCash >= actualWithdrawal) {
         currCash -= actualWithdrawal;
-        spendFromCash = actualWithdrawal;
       } else {
-        spendFromCash = currCash;
+        // Cash Empty! Forced Stock Sell.
         const shortfall = actualWithdrawal - currCash;
         currCash = 0;
-        // Forced to sell stock in a down market if cash empty
-        currStock -= shortfall;
+        
+        // We need to generate 'shortfall' amount of cash. 
+        // Gross sell needed = shortfall / (1 - cost)
+        const grossSellNeeded = shortfall / (1 - TRANSACTION_COST);
+        
+        currStock -= grossSellNeeded;
         if (currStock < 0) currStock = 0; 
       }
 
       if (returns.stock < 0) {
         actionLog = `Market Down ${(returns.stock*100).toFixed(1)}%.`;
         if (currCash > 0) actionLog += ` Spending from Cash Buffer.`;
-        else actionLog += ` Cash Empty! Forced Stock Sell.`;
+        else actionLog += ` Cash Empty! Forced Sell.`;
       } else {
         actionLog = `Market Up ${(returns.stock*100).toFixed(1)}%.`;
         if (refillAmount > 0) actionLog += ` Refilled Cash ($${Math.round(refillAmount/1000)}k).`;
@@ -203,10 +192,8 @@ const simulateYear = (
       // Apply Withdrawal
       total -= actualWithdrawal;
 
-      // Apply Rebalancing Friction/Drag
-      // Assume 0.05% of total portfolio lost to spreads/commissions/tax-drag during annual rebalance
-      const rebalanceDrag = total * 0.0005;
-      total -= rebalanceDrag;
+      // Apply Rebalancing Friction/Drag (Standardized with Bucket)
+      total -= total * TRANSACTION_COST; 
 
       if (total > 0.01) {
         currStock = total * targetWeights.stock;
@@ -225,7 +212,7 @@ const simulateYear = (
       stock: currStock,
       bond: currBond,
       cash: currCash,
-      spend: state.spend // Real spending remains constant
+      spend: state.spend 
     },
     withdrawal: actualWithdrawal,
     fees,
@@ -233,10 +220,6 @@ const simulateYear = (
     actionLog
   };
 };
-
-// ... generateAuditLog and findBestFitRun helper functions remain largely the same structure, 
-// just updated to use the new math via 'simulateYear' ...
-// For brevity in the diff, I will re-implement them to ensure context is kept.
 
 const generateAuditLog = (
   inputs: SimulationInputs, 
@@ -297,70 +280,6 @@ const generateAuditLog = (
   return log;
 };
 
-const getTerminalStats = (trajectory: number[]) => {
-  const depletionIndex = trajectory.findIndex(v => v <= 0.01); 
-  return {
-    depleted: depletionIndex !== -1,
-    depletionYear: depletionIndex,
-    finalValue: trajectory[trajectory.length - 1]
-  };
-};
-
-const findBestFitRun = (
-  allRuns: SimulationRun[], 
-  targetCurve: number[],
-  comparisonFn?: (runVal: number, compareVal: number) => boolean,
-  comparisonCurve?: number[]
-): SimulationRun => {
-  const targetStats = getTerminalStats(targetCurve);
-  let candidates = allRuns;
-
-  if (targetStats.depleted) {
-     candidates = allRuns.filter(r => {
-        const rStats = getTerminalStats(r.trajectory);
-        return rStats.depleted && Math.abs(rStats.depletionYear - targetStats.depletionYear) <= 1;
-     });
-  } else {
-     const tolerances = [0.01, 0.02, 0.05, 0.10, 0.20];
-     for (const tol of tolerances) {
-        const filtered = allRuns.filter(r => {
-             const val = r.trajectory[r.trajectory.length - 1];
-             const diff = Math.abs(val - targetStats.finalValue);
-             return diff <= (targetStats.finalValue * tol);
-        });
-        if (filtered.length > 5) {
-            candidates = filtered;
-            break;
-        }
-     }
-  }
-  if (candidates.length === 0) candidates = allRuns;
-
-  let bestRun = candidates[0];
-  let minError = Number.MAX_VALUE;
-
-  for (const run of candidates) {
-    let error = 0;
-    let penalty = 0;
-    for (let i = 0; i < targetCurve.length; i++) {
-        if (i < run.trajectory.length) {
-            const diff = run.trajectory[i] - targetCurve[i];
-            error += diff * diff;
-            if (comparisonFn && comparisonCurve) {
-              if (!comparisonFn(run.trajectory[i], comparisonCurve[i])) {
-                penalty += 1e12;
-              }
-            }
-        }
-    }
-    if ((error + penalty) < minError) {
-      minError = error + penalty;
-      bestRun = run;
-    }
-  }
-  return bestRun;
-};
-
 // 4. MAIN EXPORT
 
 export const runSimulation = (
@@ -370,16 +289,12 @@ export const runSimulation = (
   const { initialCash, initialInvestments, annualSpend, timeHorizon, customStockAllocation, inflationRate } = inputs;
   const totalStartPortfolio = initialCash + initialInvestments;
   
-  // Weights setup
   let targetStockWeight = 0;
   let targetBondWeight = 0;
   if (strategy === 'CONSERVATIVE') { targetBondWeight = 0.40; targetStockWeight = 0.60; }
   else if (strategy === 'AGGRESSIVE') { targetBondWeight = 0.30; targetStockWeight = 0.70; }
   else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
 
-  // Adjust Returns for Inflation (Fisher Equation approximation: r_real = (1+r_nom)/(1+i) - 1)
-  // Or simply subtraction for small rates: r_real = r_nom - i
-  // We will use the accurate division method for precision
   const inflate = (val: number) => (1 + val) / (1 + inflationRate / 100) - 1;
   const deflateVol = (val: number) => val / (1 + inflationRate / 100);
 
@@ -390,7 +305,9 @@ export const runSimulation = (
   };
 
   const allRuns: SimulationRun[] = [];
-  const trajectories: number[][] = Array(timeHorizon).fill(0).map(() => []);
+  // Use Float64Array for column-based storage (Performance Optimization)
+  const trajectoryColumns: Float64Array[] = Array(timeHorizon).fill(0).map(() => new Float64Array(NUM_SIMULATIONS));
+  
   let failures = 0;
   let totalAnnualizedVol = 0;
 
@@ -412,13 +329,13 @@ export const runSimulation = (
     }
 
     const currentRunReturns: { stock: number; bond: number; cash: number }[] = [];
-    const currentRunTrajectory: number[] = [];
+    // Store local trajectory for this run in a typed array
+    const currentRunTrajectory = new Float64Array(timeHorizon);
     const runPortfolioReturns: number[] = [];
     
     let prevBalance = totalStartPortfolio;
 
     for (let year = 0; year < timeHorizon; year++) {
-      // Generate Correlated Real Returns
       const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
       currentRunReturns.push(returns);
 
@@ -429,23 +346,19 @@ export const runSimulation = (
       let totalPortfolio = state.stock + state.bond + state.cash;
       if (totalPortfolio < 0) totalPortfolio = 0;
       
-      // Calculate Portfolio Return for this year (for volatility calc)
-      // Return = (EndBalance + Withdrawal) / StartBalance - 1
-      // We add withdrawal back to see the performance of the assets themselves
       if (prevBalance > 0.01) {
         const performance = ((totalPortfolio + outcome.withdrawal) / prevBalance) - 1;
         runPortfolioReturns.push(performance);
       }
 
-      currentRunTrajectory.push(totalPortfolio);
-      trajectories[year].push(totalPortfolio);
+      currentRunTrajectory[year] = totalPortfolio;
+      trajectoryColumns[year][sim] = totalPortfolio;
       prevBalance = totalPortfolio;
     }
     
     const finalVal = state.stock + state.bond + state.cash;
     if (finalVal <= 1) failures++;
 
-    // Calculate annualized volatility for this run
     let variance = 0;
     if (runPortfolioReturns.length > 0) {
       const meanR = runPortfolioReturns.reduce((a,b) => a+b, 0) / runPortfolioReturns.length;
@@ -453,6 +366,8 @@ export const runSimulation = (
     }
     totalAnnualizedVol += Math.sqrt(variance);
     
+    // We only store the full object if we might need it, but we can't optimize this fully away 
+    // without refactoring how audit logs are retrieved.
     allRuns.push({
       id: sim,
       finalBalance: finalVal,
@@ -469,24 +384,20 @@ export const runSimulation = (
   const downturnCurve: number[] = [];
   const currentYear = new Date().getFullYear();
 
-  const chartData: YearResult[] = trajectories.map((yearValues, index) => {
-    yearValues.sort((a, b) => a - b);
-    
-    const dVal = yearValues[Math.floor(NUM_SIMULATIONS * 0.10)];
-    const bVal = yearValues[Math.floor(NUM_SIMULATIONS * 0.25)];
-    const aVal = yearValues[Math.floor(NUM_SIMULATIONS * 0.50)];
+  // Sort columns to find percentiles (Much faster than full run sorts for every year)
+  for(let i=0; i<timeHorizon; i++) {
+     const yearValues = trajectoryColumns[i].sort();
+     downturnCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.10)]);
+     belowAverageCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.25)]);
+     averageCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.50)]);
+  }
 
-    downturnCurve.push(dVal);
-    belowAverageCurve.push(bVal);
-    averageCurve.push(aVal);
-
-    return {
-      year: currentYear + index + 1,
-      downturn: dVal, 
-      belowAverage: bVal, 
-      average: aVal, 
-    };
-  });
+  const chartData: YearResult[] = averageCurve.map((val, idx) => ({
+    year: currentYear + idx + 1,
+    average: val,
+    belowAverage: belowAverageCurve[idx],
+    downturn: downturnCurve[idx]
+  }));
   
   chartData.unshift({
     year: currentYear,
@@ -495,18 +406,20 @@ export const runSimulation = (
     downturn: totalStartPortfolio
   });
 
-  // Select representative runs for audit
-  const downturnRun = findBestFitRun(allRuns, downturnCurve);
-  const belowAvgRun = findBestFitRun(allRuns, belowAverageCurve, (val, compareVal) => val >= compareVal, downturnRun.trajectory);
-  const medianRun = findBestFitRun(allRuns, averageCurve, (val, compareVal) => val >= compareVal, belowAvgRun.trajectory);
+  // PERFORMANCE FIX: Simplify Best Fit Selection
+  // Instead of expensive O(N*T) distance calculation, just sort runs by final balance 
+  // and pick the ones at the specific percentiles. It's statistically sufficient.
+  allRuns.sort((a, b) => a.finalBalance - b.finalBalance);
+
+  const downturnRun = allRuns[Math.floor(NUM_SIMULATIONS * 0.10)];
+  const belowAvgRun = allRuns[Math.floor(NUM_SIMULATIONS * 0.25)];
+  const medianRun = allRuns[Math.floor(NUM_SIMULATIONS * 0.50)];
 
   const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns);
   const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns);
   const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns);
 
-  // Final Stats
-  const allFinals = allRuns.map(r => r.finalBalance).sort((a,b) => a-b);
-  const finalMedian = allFinals[Math.floor(NUM_SIMULATIONS * 0.50)];
+  const finalMedian = medianRun.finalBalance;
   const avgVol = (totalAnnualizedVol / NUM_SIMULATIONS) * 100;
 
   // Display Allocation Calc

@@ -70,9 +70,13 @@ const SetupView: React.FC<SetupViewProps> = ({
   // Local state for the form
   const [formState, setFormState] = useState<SimulationInputs>(defaultInputs);
 
-  // Sync local state if defaultInputs change (e.g. coming back from Simulation view)
+  // Sync local state ONLY if values truly differ (deep check)
+  // This prevents the "resetting while typing" issue if parent re-renders
   useEffect(() => {
-    setFormState(defaultInputs);
+    if (JSON.stringify(defaultInputs) !== JSON.stringify(formState)) {
+        setFormState(defaultInputs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultInputs]);
 
   const updateField = (field: keyof SimulationInputs, val: number) => {
