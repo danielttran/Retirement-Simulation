@@ -30,8 +30,8 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
                 {entry.name}
               </span>
               <span className="text-xs font-bold text-slate-700">
-                {entry.value !== null && typeof entry.value === 'number' 
-                  ? `$${entry.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
+                {entry.value !== null && typeof entry.value === 'number'
+                  ? `$${entry.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
                   : 'Depleted'}
               </span>
             </div>
@@ -53,10 +53,10 @@ interface SimulationViewProps {
   onCustomAllocationChange: (alloc: number) => void;
 }
 
-const SimulationView: React.FC<SimulationViewProps> = ({ 
-  inputs, 
-  results, 
-  selectedStrategy, 
+const SimulationView: React.FC<SimulationViewProps> = ({
+  inputs,
+  results,
+  selectedStrategy,
   setSelectedStrategy,
   onEdit,
   onRun,
@@ -64,7 +64,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
 }) => {
   const [viewDuration, setViewDuration] = useState<number | 'MAX'>('MAX');
   const [auditMode, setAuditMode] = useState(false);
-  const [auditScenario, setAuditScenario] = useState<'AVERAGE' | 'BELOW' | 'DOWNTURN'>('DOWNTURN');
+  const [auditScenario, setAuditScenario] = useState<'AVERAGE' | 'BELOW' | 'DOWNTURN'>('BELOW');
 
   const startYear = new Date().getFullYear();
   const runTime = new Date(results.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -76,62 +76,62 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   };
 
   const getStrategyName = (s: StrategyType) => {
-    switch(s) {
+    switch (s) {
       case 'BUCKET': return 'Bucket Strategy';
       case 'CONSERVATIVE': return '40/60 Split';
       case 'AGGRESSIVE': return '30/70 Split';
       case 'CUSTOM': return 'Custom Allocation';
     }
   };
-  
+
   const getStrategyDescription = (s: StrategyType) => {
     if (s === 'BUCKET') {
-        return (
-            <>
-                <p className="mb-4">
-                    This strategy divides your portfolio into two distinct buckets to mitigate risk:
-                </p>
-                <ul className="list-disc pl-4 space-y-2 mb-4">
-                    <li><strong>Cash Bucket:</strong> Holds 2 years of living expenses in safe, liquid assets.</li>
-                    <li><strong>Growth Bucket:</strong> The remainder is invested in equities for long-term growth.</li>
-                </ul>
-                <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation:</p>
-                <ol className="list-decimal pl-4 space-y-2">
-                    <li>If the market is <strong>UP</strong> (Stock Up), we sell gains to refill the Cash Bucket back to 2 years.</li>
-                    <li>If the market is <strong>DOWN</strong> (Stock Down), we <strong>do not sell stocks</strong>. We spend directly from the Cash Bucket, allowing stocks time to recover.</li>
-                    <li>Stocks are only sold in a downturn if the Cash Bucket is completely empty.</li>
-                </ol>
-            </>
-        );
+      return (
+        <>
+          <p className="mb-4">
+            This strategy divides your portfolio into two distinct buckets to mitigate risk:
+          </p>
+          <ul className="list-disc pl-4 space-y-2 mb-4">
+            <li><strong>Cash Bucket:</strong> Holds 2 years of living expenses in safe, liquid assets.</li>
+            <li><strong>Growth Bucket:</strong> The remainder is invested in equities for long-term growth.</li>
+          </ul>
+          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation:</p>
+          <ol className="list-decimal pl-4 space-y-2">
+            <li>If the market is <strong>UP</strong> (Stock Up), we sell gains to refill the Cash Bucket back to 2 years.</li>
+            <li>If the market is <strong>DOWN</strong> (Stock Down), we <strong>do not sell stocks</strong>. We spend directly from the Cash Bucket, allowing stocks time to recover.</li>
+            <li>Stocks are only sold in a downturn if the Cash Bucket is completely empty.</li>
+          </ol>
+        </>
+      );
     } else {
-        const stockPct = s === 'CONSERVATIVE' ? 60 : s === 'AGGRESSIVE' ? 70 : inputs.customStockAllocation;
-        const bondPct = 100 - stockPct;
-        return (
-            <>
-                 <p className="mb-4">
-                    A traditional <strong>Fixed Allocation</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
-                </p>
-                <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Yearly Rebalancing):</p>
-                <ul className="list-disc pl-4 space-y-2 mb-4">
-                    <li>
-                        <strong>If Stock is UP:</strong> The portfolio has too much stock. We sell some stock to refill our bonds and pay expenses.
-                    </li>
-                    <li>
-                        <strong>If Stock is DOWN:</strong> The portfolio has too many bonds. We spend from the bonds (selling them) to pay expenses and buy cheap stocks to restore the ratio.
-                    </li>
-                </ul>
-                <p>
-                    This disciplined approach automatically forces you to buy low and sell high while ensuring you always have the target mix of safety (bonds) and growth (stocks).
-                </p>
-            </>
-        )
+      const stockPct = s === 'CONSERVATIVE' ? 60 : s === 'AGGRESSIVE' ? 70 : inputs.customStockAllocation;
+      const bondPct = 100 - stockPct;
+      return (
+        <>
+          <p className="mb-4">
+            A traditional <strong>Fixed Allocation</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
+          </p>
+          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Yearly Rebalancing):</p>
+          <ul className="list-disc pl-4 space-y-2 mb-4">
+            <li>
+              <strong>If Stock is UP:</strong> The portfolio has too much stock. We sell some stock to refill our bonds and pay expenses.
+            </li>
+            <li>
+              <strong>If Stock is DOWN:</strong> The portfolio has too many bonds. We spend from the bonds (selling them) to pay expenses and buy cheap stocks to restore the ratio.
+            </li>
+          </ul>
+          <p>
+            This disciplined approach automatically forces you to buy low and sell high while ensuring you always have the target mix of safety (bonds) and growth (stocks).
+          </p>
+        </>
+      )
     }
   }
 
   const handleStrategyChange = (s: StrategyType) => {
     setSelectedStrategy(s);
   };
-  
+
   const handleCustomSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = parseInt(e.target.value);
     onCustomAllocationChange(newVal);
@@ -151,7 +151,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
     if (viewDuration !== 'MAX') {
       dataToUse = results.data.filter(d => d.year <= startYear + viewDuration);
     }
-    
+
     // Process for "disappearing line" effect when value hits 0
     let avgDepleted = false;
     let belowDepleted = false;
@@ -235,7 +235,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               <span className="text-base font-bold text-slate-800">{inputs.timeHorizon} Years</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={onEdit}
             className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 px-5 py-2.5 bg-slate-50 rounded-lg border border-slate-200 transition-all whitespace-nowrap"
           >
@@ -253,11 +253,10 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               <button
                 key={t}
                 onClick={() => handleStrategyChange(t)}
-                className={`pb-5 text-sm font-medium transition-all border-b-2 ${
-                  selectedStrategy === t 
-                  ? 'text-slate-900 border-primary font-bold' 
+                className={`pb-5 text-sm font-medium transition-all border-b-2 ${selectedStrategy === t
+                  ? 'text-slate-900 border-primary font-bold'
                   : 'text-slate-400 hover:text-slate-600 border-transparent'
-                }`}
+                  }`}
               >
                 {t === 'BUCKET' && 'Bucket Strategy'}
                 {t === 'CONSERVATIVE' && '40/60 Split'}
@@ -275,7 +274,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
 
         <div className="grid grid-cols-12 gap-10">
           <div className="col-span-12 lg:col-span-9">
-            
+
             {/* Chart Container */}
             <div className="bg-white border border-slate-200 rounded-xl p-6 md:p-10 shadow-sm mb-10">
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
@@ -283,33 +282,31 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   <h2 className="text-2xl font-bold text-slate-900 mb-1">Portfolio Projection</h2>
                   <p className="text-sm text-slate-500 font-medium">10,000 market scenarios simulated <span className="text-slate-300 mx-2">•</span> Last Run: {runTime}</p>
                 </div>
-                
+
                 <div className="flex flex-col md:items-end gap-4">
                   {/* Time Horizon Buttons */}
                   <div className="bg-slate-50 p-1 rounded-lg border border-slate-200 flex flex-wrap gap-1">
-                     {[5, 10, 15, 20].map(year => (
-                       <button 
+                    {[5, 10, 15, 20].map(year => (
+                      <button
                         key={year}
                         onClick={() => setViewDuration(year)}
-                        className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${
-                          viewDuration === year 
-                          ? 'bg-white text-slate-900 shadow-sm border border-slate-100' 
+                        className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${viewDuration === year
+                          ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
                           : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                       >
-                         {year} Years
-                       </button>
-                     ))}
-                     <button 
+                          }`}
+                      >
+                        {year} Years
+                      </button>
+                    ))}
+                    <button
                       onClick={() => setViewDuration('MAX')}
-                      className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${
-                        viewDuration === 'MAX' 
-                        ? 'bg-white text-slate-900 shadow-sm border border-slate-100' 
+                      className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${viewDuration === 'MAX'
+                        ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
                         : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                     >
-                       Full View
-                     </button>
+                        }`}
+                    >
+                      Full View
+                    </button>
                   </div>
 
                   {/* Legend */}
@@ -333,20 +330,20 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               {/* Custom Allocation Slider */}
               {selectedStrategy === 'CUSTOM' && (
                 <div className="mb-8 p-6 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in slide-in-from-top-2">
-                   <div className="flex justify-between items-center mb-4">
-                      <label className="text-sm font-bold text-slate-800 uppercase tracking-wide">
-                        Stock / Bond Allocation
-                      </label>
-                      <span className="text-sm font-bold bg-white px-3 py-1 rounded border border-slate-200 shadow-sm">
-                        {inputs.customStockAllocation}% Stocks / {100 - inputs.customStockAllocation}% Bonds
-                      </span>
-                   </div>
-                   <div className="flex items-center gap-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                      Stock / Bond Allocation
+                    </label>
+                    <span className="text-sm font-bold bg-white px-3 py-1 rounded border border-slate-200 shadow-sm">
+                      {inputs.customStockAllocation}% Stocks / {100 - inputs.customStockAllocation}% Bonds
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
                     <span className="text-xs font-bold text-slate-400 w-16 text-right">0% Equity</span>
-                    <input 
-                      className="w-full h-2 bg-slate-200 accent-primary rounded-lg appearance-none cursor-pointer" 
+                    <input
+                      className="w-full h-2 bg-slate-200 accent-primary rounded-lg appearance-none cursor-pointer"
                       max="100" min="0" step="5"
-                      type="range" 
+                      type="range"
                       value={inputs.customStockAllocation}
                       onChange={handleCustomSliderChange}
                     />
@@ -361,62 +358,62 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   <AreaChart data={visibleData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#059669" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#059669" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#059669" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#059669" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorBelow" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#d97706" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#d97706" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#d97706" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#d97706" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorDown" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#dc2626" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#dc2626" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#dc2626" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#dc2626" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis 
-                      dataKey="year" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} 
+                    <XAxis
+                      dataKey="year"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}
                       dy={10}
                     />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} 
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}
                       tickFormatter={formatCurrency}
                       dx={-10}
                     />
                     <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '5 5' }} />
-                    <Area 
-                      type="monotone" 
-                      dataKey="average" 
+                    <Area
+                      type="monotone"
+                      dataKey="average"
                       name="Average Market"
-                      stroke="#059669" 
+                      stroke="#059669"
                       strokeWidth={1}
-                      fillOpacity={1} 
-                      fill="url(#colorAvg)" 
+                      fillOpacity={1}
+                      fill="url(#colorAvg)"
                       connectNulls={false}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="belowAverage" 
+                    <Area
+                      type="monotone"
+                      dataKey="belowAverage"
                       name="Below Average"
-                      stroke="#d97706" 
+                      stroke="#d97706"
                       strokeWidth={1}
-                      fillOpacity={1} 
-                      fill="url(#colorBelow)" 
+                      fillOpacity={1}
+                      fill="url(#colorBelow)"
                       connectNulls={false}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="downturn" 
+                    <Area
+                      type="monotone"
+                      dataKey="downturn"
                       name="Significant Downturn"
-                      stroke="#dc2626" 
+                      stroke="#dc2626"
                       strokeWidth={1}
-                      fillOpacity={1} 
-                      fill="url(#colorDown)" 
+                      fillOpacity={1}
+                      fill="url(#colorDown)"
                       connectNulls={false}
                     />
                     <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="3 3" />
@@ -451,41 +448,41 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-10">
               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
-                   <h3 className="text-lg font-bold text-slate-900 whitespace-nowrap">
-                     {auditMode ? 'Audit Strategy Log' : 'Yearly Balance Projection'}
-                   </h3>
-                   {/* Checkbox Button */}
-                   <label className="flex items-center gap-3 cursor-pointer select-none group ml-4">
-                     <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${auditMode ? 'bg-primary border-primary' : 'bg-white border-slate-300 group-hover:border-primary'}`}>
-                        <span className={`material-symbols-outlined text-[14px] font-bold text-slate-900 transition-opacity ${auditMode ? 'opacity-100' : 'opacity-0'}`}>check</span>
-                     </div>
-                     <input 
-                      type="checkbox" 
-                      className="hidden" 
-                      checked={auditMode} 
+                  <h3 className="text-lg font-bold text-slate-900 whitespace-nowrap">
+                    {auditMode ? 'Audit Strategy Log' : 'Yearly Balance Projection'}
+                  </h3>
+                  {/* Checkbox Button */}
+                  <label className="flex items-center gap-3 cursor-pointer select-none group ml-4">
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${auditMode ? 'bg-primary border-primary' : 'bg-white border-slate-300 group-hover:border-primary'}`}>
+                      <span className={`material-symbols-outlined text-[14px] font-bold text-slate-900 transition-opacity ${auditMode ? 'opacity-100' : 'opacity-0'}`}>check</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={auditMode}
                       onChange={() => setAuditMode(!auditMode)}
-                     />
-                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-slate-800 transition-colors">Audit Mode (Verify Math)</span>
-                   </label>
+                    />
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-slate-800 transition-colors">Audit Mode (Verify Math)</span>
+                  </label>
                 </div>
 
                 <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
                   {!auditMode && <span className="text-[10px] text-slate-400 font-bold uppercase hidden md:inline">Last Updated: {runTime}</span>}
                   {auditMode && (
                     <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <button 
+                      <button
                         onClick={() => setAuditScenario('AVERAGE')}
                         className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'AVERAGE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
                         Avg Scenario
                       </button>
-                      <button 
+                      <button
                         onClick={() => setAuditScenario('BELOW')}
                         className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'BELOW' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
                         Below Avg
                       </button>
-                      <button 
+                      <button
                         onClick={() => setAuditScenario('DOWNTURN')}
                         className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'DOWNTURN' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
@@ -498,7 +495,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   </button>
                 </div>
               </div>
-              
+
               <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
                 <table className="w-full text-sm text-left relative">
                   {auditMode ? (
@@ -526,63 +523,63 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                       </tr>
                     </thead>
                   )}
-                  
+
                   <tbody className="divide-y divide-slate-100">
                     {auditMode ? (
-                        // AUDIT TABLE ROWS
-                        getAuditData().map((row) => (
-                          <tr key={row.year} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-4 py-4 font-bold text-slate-700">{row.year}</td>
-                            <td className="px-4 py-4 font-medium text-slate-600 text-xs">
-                              <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                            </td>
-                            <td className="px-4 py-4 text-xs font-medium">
-                              <div className={`${row.stockReturn >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>Stock: {(row.stockReturn * 100).toFixed(1)}%</div>
-                              {/* Only show Bond if strategy is NOT Bucket (which has 0 bonds) */}
-                              {selectedStrategy !== 'BUCKET' && (
-                                <div className={`${row.bondReturn >= 0 ? 'text-blue-600' : 'text-red-600'}`}>Bond: {(row.bondReturn * 100).toFixed(1)}%</div>
-                              )}
-                              {/* Only show Cash if strategy IS Bucket (Fixed allocations have 0 cash) */}
-                              {selectedStrategy === 'BUCKET' && (
-                                <div className="text-slate-400">Cash: {(row.cashReturn * 100).toFixed(1)}%</div>
-                              )}
-                            </td>
-                            <td className={`px-4 py-4 font-bold ${row.growthAmount >= 0 ? 'text-emerald-600' : 'text-downturn-red'}`}>
-                              {row.growthAmount >= 0 ? '+' : ''}${row.growthAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </td>
-                            <td className="px-4 py-4 font-bold text-amber-600">
-                              -${row.feesAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </td>
-                            <td className="px-4 py-4 text-xs font-medium text-slate-700 leading-relaxed">
-                              {row.action}
-                            </td>
-                            <td className="px-4 py-4 font-medium text-slate-600">
-                              -${row.withdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </td>
-                            <td className="px-4 py-4 font-bold text-slate-800">
-                              ${row.endTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </td>
-                          </tr>
-                        ))
+                      // AUDIT TABLE ROWS
+                      getAuditData().map((row) => (
+                        <tr key={row.year} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-4 py-4 font-bold text-slate-700">{row.year}</td>
+                          <td className="px-4 py-4 font-medium text-slate-600 text-xs">
+                            <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                          </td>
+                          <td className="px-4 py-4 text-xs font-medium">
+                            <div className={`${row.stockReturn >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>Stock: {(row.stockReturn * 100).toFixed(1)}%</div>
+                            {/* Only show Bond if strategy is NOT Bucket (which has 0 bonds) */}
+                            {selectedStrategy !== 'BUCKET' && (
+                              <div className={`${row.bondReturn >= 0 ? 'text-blue-600' : 'text-red-600'}`}>Bond: {(row.bondReturn * 100).toFixed(1)}%</div>
+                            )}
+                            {/* Only show Cash if strategy IS Bucket (Fixed allocations have 0 cash) */}
+                            {selectedStrategy === 'BUCKET' && (
+                              <div className="text-slate-400">Cash: {(row.cashReturn * 100).toFixed(1)}%</div>
+                            )}
+                          </td>
+                          <td className={`px-4 py-4 font-bold ${row.growthAmount >= 0 ? 'text-emerald-600' : 'text-downturn-red'}`}>
+                            {row.growthAmount >= 0 ? '+' : ''}${row.growthAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </td>
+                          <td className="px-4 py-4 font-bold text-amber-600">
+                            -${row.feesAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </td>
+                          <td className="px-4 py-4 text-xs font-medium text-slate-700 leading-relaxed">
+                            {row.action}
+                          </td>
+                          <td className="px-4 py-4 font-medium text-slate-600">
+                            -${row.withdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </td>
+                          <td className="px-4 py-4 font-bold text-slate-800">
+                            ${row.endTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </td>
+                        </tr>
+                      ))
                     ) : (
-                        // NORMAL TABLE ROWS
-                        visibleData.map((row) => (
-                          <tr key={row.year} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-4 font-bold text-slate-700">
-                              {row.year} 
-                              {row.year - startYear > 0 && <span className="text-[10px] text-slate-400 font-normal ml-1">({row.year - startYear} years away)</span>}
-                            </td>
-                            <td className={`px-6 py-4 font-medium ${row.average === null ? 'bg-red-50 text-red-600' : 'text-slate-600'}`}>
-                              {row.average !== null ? `$${row.average.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
-                            </td>
-                            <td className={`px-6 py-4 font-medium ${row.belowAverage === null ? 'bg-orange-50 text-orange-600' : 'text-slate-600'}`}>
-                              {row.belowAverage !== null ? `$${row.belowAverage.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
-                            </td>
-                            <td className={`px-6 py-4 font-medium ${row.downturn === null ? 'bg-red-100 text-red-700' : 'text-slate-600'}`}>
-                              {row.downturn !== null ? `$${row.downturn.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
-                            </td>
-                          </tr>
-                        ))
+                      // NORMAL TABLE ROWS
+                      visibleData.map((row) => (
+                        <tr key={row.year} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 font-bold text-slate-700">
+                            {row.year}
+                            {row.year - startYear > 0 && <span className="text-[10px] text-slate-400 font-normal ml-1">({row.year - startYear} years away)</span>}
+                          </td>
+                          <td className={`px-6 py-4 font-medium ${row.average === null ? 'bg-red-50 text-red-600' : 'text-slate-600'}`}>
+                            {row.average !== null ? `$${row.average.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
+                          </td>
+                          <td className={`px-6 py-4 font-medium ${row.belowAverage === null ? 'bg-orange-50 text-orange-600' : 'text-slate-600'}`}>
+                            {row.belowAverage !== null ? `$${row.belowAverage.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
+                          </td>
+                          <td className={`px-6 py-4 font-medium ${row.downturn === null ? 'bg-red-100 text-red-700' : 'text-slate-600'}`}>
+                            {row.downturn !== null ? `$${row.downturn.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -597,7 +594,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                 <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
                   <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : 'Monitor Closely'}
                 </span>
-                <p className="text-[10px] text-slate-400 mt-2 leading-tight">Percentage of simulations where portfolio > $0 at end of term.</p>
+                <p className="text-[10px] text-slate-400 mt-2 leading-tight">Percentage of simulations where portfolio &gt; $0 at end of term.</p>
               </div>
               <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 hover:shadow-md transition-shadow">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Expected Final Value</span>

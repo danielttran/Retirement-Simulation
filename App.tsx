@@ -8,12 +8,12 @@ type View = 'SETUP' | 'SIMULATION';
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>('SETUP');
-  
+
   // Default inputs
   const [inputs, setInputs] = useState<SimulationInputs>({
-    initialCash: 100000,
-    initialInvestments: 1150000,
-    annualSpend: 65000,
+    initialCash: 10000,
+    initialInvestments: 500000,
+    annualSpend: 30000,
     timeHorizon: 30,
     inflationRate: 3.0,
     managementFee: 0.30, // Updated default to 0.30% which is realistic
@@ -52,22 +52,22 @@ const App: React.FC = () => {
   return (
     <>
       {view === 'SETUP' && (
-        <SetupView 
-          defaultInputs={inputs} 
+        <SetupView
+          defaultInputs={inputs}
           onRun={handleRunSimulation}
         />
       )}
-      
+
       {view === 'SIMULATION' && results && (
-        <SimulationView 
+        <SimulationView
           inputs={inputs}
           results={results}
           selectedStrategy={selectedStrategy}
           setSelectedStrategy={setSelectedStrategy}
           onEdit={() => setView('SETUP')}
           onRun={() => {
-             const res = runSimulation(inputs, selectedStrategy);
-             setResults(res);
+            const res = runSimulation(inputs, selectedStrategy);
+            setResults(res);
           }}
           onCustomAllocationChange={handleCustomAllocationChange}
         />
