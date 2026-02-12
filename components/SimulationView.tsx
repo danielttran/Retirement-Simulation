@@ -132,6 +132,36 @@ const SimulationView: React.FC<SimulationViewProps> = ({
     setSelectedStrategy(s);
   };
 
+  const handleExportReport = () => {
+    window.print();
+  };
+
+  const handleDownloadCSV = () => {
+    const headers = ['Year', 'Average Market', 'Below Average', 'Downturn Scenario'];
+    const rows = results.data.map(d => [
+      d.year,
+      d.average ? d.average.toFixed(2) : '0.00',
+      d.belowAverage ? d.belowAverage.toFixed(2) : '0.00',
+      d.downturn ? d.downturn.toFixed(2) : '0.00'
+    ]);
+
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `retirement_simulation_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleCustomSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = parseInt(e.target.value);
     onCustomAllocationChange(newVal);
@@ -203,7 +233,10 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                 {results.successRate.toFixed(1)}% ({results.successRate > 90 ? 'High' : 'Moderate'})
               </span>
             </div>
-            <button className="bg-slate-900 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all flex items-center gap-2 shadow-md">
+            <button
+              onClick={handleExportReport}
+              className="bg-emerald-900 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-800 transition-all flex items-center gap-2 shadow-md cursor-pointer"
+            >
               <span className="material-symbols-outlined text-lg">download_for_offline</span>
               <span className="hidden md:inline">Export Report</span>
             </button>
@@ -237,7 +270,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
           </div>
           <button
             onClick={onEdit}
-            className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 px-5 py-2.5 bg-slate-50 rounded-lg border border-slate-200 transition-all whitespace-nowrap"
+            className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-5 py-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm leading-none">settings_input_component</span>
             Adjust Inputs
@@ -490,8 +523,12 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                       </button>
                     </div>
                   )}
-                  <button className="text-[10px] font-bold text-primary uppercase tracking-widest hover:text-yellow-600 flex items-center gap-1 whitespace-nowrap">
-                    Download CSV <span className="material-symbols-outlined text-sm">download</span>
+                  <button
+                    onClick={handleDownloadCSV}
+                    className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-4 py-2 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer"
+                  >
+                    <span>Download CSV</span>
+                    <span className="material-symbols-outlined text-sm leading-none">download</span>
                   </button>
                 </div>
               </div>
@@ -505,8 +542,8 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                         <th className="px-4 py-4 bg-slate-50 text-slate-800">Year</th>
                         <th className="px-4 py-4 bg-slate-50 text-slate-800">Start Balance</th>
                         <th className="px-4 py-4 bg-slate-50 text-slate-800">Real Returns</th>
-                        <th className="px-4 py-4 bg-slate-50 text-slate-800">Growth ($)</th>
-                        <th className="px-4 py-4 bg-slate-50 text-amber-600">Fees ($)</th>
+                        <th className="px-4 py-4 bg-slate-50 text-slate-800">Growth</th>
+                        <th className="px-4 py-4 bg-slate-50 text-amber-600">Fees</th>
                         <th className="px-4 py-4 bg-slate-50 text-slate-800 w-1/4">Strategy Action</th>
                         <th className="px-4 py-4 bg-slate-50 text-slate-800">Withdrawal</th>
                         <th className="px-4 py-4 bg-slate-50 text-slate-800">End Balance</th>
@@ -667,9 +704,6 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl p-6 text-center shadow-sm">
               <p className="text-[10px] font-bold text-primary uppercase mb-2 tracking-[0.2em]">Simulation Core</p>
               <p className="text-xs text-slate-500 mb-6 leading-relaxed">Historical datasets from 1926-2023 used for variance modeling.</p>
-              <button className="bg-slate-50 text-slate-600 w-full py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-widest hover:bg-slate-100 transition-all border border-slate-200">
-                Audit Data Logs
-              </button>
             </div>
           </aside>
         </div>

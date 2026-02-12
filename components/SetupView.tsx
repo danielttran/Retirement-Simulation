@@ -7,16 +7,16 @@ interface SetupViewProps {
 }
 
 // Helper component for formatted numerical inputs
-const CurrencyInput = ({ 
-  value, 
-  onChange, 
-  prefix = "", 
-  suffix = "" 
-}: { 
-  value: number; 
-  onChange: (val: number) => void; 
-  prefix?: string; 
-  suffix?: string 
+const CurrencyInput = ({
+  value,
+  onChange,
+  prefix = "",
+  suffix = ""
+}: {
+  value: number;
+  onChange: (val: number) => void;
+  prefix?: string;
+  suffix?: string
 }) => {
   const [displayStr, setDisplayStr] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -50,9 +50,9 @@ const CurrencyInput = ({
   return (
     <div className="relative flex items-center group">
       {prefix && <span className="absolute left-4 text-slate-400 font-semibold text-xs">{prefix}</span>}
-      <input 
+      <input
         className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-medium ${prefix ? 'pl-8' : ''} ${suffix ? 'pr-12' : ''}`}
-        type="text" 
+        type="text"
         value={displayStr}
         onFocus={handleFocus}
         onBlur={handleBlur}
@@ -63,9 +63,9 @@ const CurrencyInput = ({
   );
 };
 
-const SetupView: React.FC<SetupViewProps> = ({ 
-  defaultInputs, 
-  onRun 
+const SetupView: React.FC<SetupViewProps> = ({
+  defaultInputs,
+  onRun
 }) => {
   // Local state for the form
   const [formState, setFormState] = useState<SimulationInputs>(defaultInputs);
@@ -74,7 +74,7 @@ const SetupView: React.FC<SetupViewProps> = ({
   // This prevents the "resetting while typing" issue if parent re-renders
   useEffect(() => {
     if (JSON.stringify(defaultInputs) !== JSON.stringify(formState)) {
-        setFormState(defaultInputs);
+      setFormState(defaultInputs);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultInputs]);
@@ -119,13 +119,13 @@ const SetupView: React.FC<SetupViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
             {/* Left Column - Assets */}
             <div className="space-y-8">
-               <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">Assets</h3>
+              <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">Assets</h3>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Total Cash Savings</label>
-                <CurrencyInput 
-                  value={formState.initialCash} 
-                  onChange={(v) => updateField('initialCash', v)} 
-                  prefix="$" 
+                <CurrencyInput
+                  value={formState.initialCash}
+                  onChange={(v) => updateField('initialCash', v)}
+                  prefix="$"
                   suffix="USD"
                 />
                 <p className="text-[10px] text-slate-400 mt-2">Cash, Savings, CDs, and other liquid equivalents.</p>
@@ -133,10 +133,10 @@ const SetupView: React.FC<SetupViewProps> = ({
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Investment Portfolio</label>
-                <CurrencyInput 
-                  value={formState.initialInvestments} 
-                  onChange={(v) => updateField('initialInvestments', v)} 
-                  prefix="$" 
+                <CurrencyInput
+                  value={formState.initialInvestments}
+                  onChange={(v) => updateField('initialInvestments', v)}
+                  prefix="$"
                   suffix="USD"
                 />
                 <p className="text-[10px] text-slate-400 mt-2">Total value of Stocks, Bonds, ETFs, and Mutual Funds.</p>
@@ -148,10 +148,10 @@ const SetupView: React.FC<SetupViewProps> = ({
               <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">Variables</h3>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Annual Retirement Spending</label>
-                <CurrencyInput 
-                  value={formState.annualSpend} 
-                  onChange={(v) => updateField('annualSpend', v)} 
-                  prefix="$" 
+                <CurrencyInput
+                  value={formState.annualSpend}
+                  onChange={(v) => updateField('annualSpend', v)}
+                  prefix="$"
                   suffix="USD"
                 />
               </div>
@@ -159,10 +159,10 @@ const SetupView: React.FC<SetupViewProps> = ({
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Simulation Time Horizon</label>
                 <div className="flex items-center gap-4">
-                  <input 
-                    className="w-full h-1 bg-slate-200 accent-primary rounded-lg appearance-none cursor-pointer" 
-                    max="50" min="5" 
-                    type="range" 
+                  <input
+                    className="w-full h-1 bg-slate-200 accent-primary rounded-lg appearance-none cursor-pointer"
+                    max="50" min="5"
+                    type="range"
                     value={formState.timeHorizon}
                     onChange={(e) => updateField('timeHorizon', parseInt(e.target.value))}
                   />
@@ -173,17 +173,17 @@ const SetupView: React.FC<SetupViewProps> = ({
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Inflation Rate</label>
-                  <CurrencyInput 
-                    value={formState.inflationRate} 
-                    onChange={(v) => updateField('inflationRate', v)} 
+                  <CurrencyInput
+                    value={formState.inflationRate}
+                    onChange={(v) => updateField('inflationRate', v)}
                     suffix="%"
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Management Fee</label>
-                  <CurrencyInput 
-                    value={formState.managementFee} 
-                    onChange={(v) => updateField('managementFee', v)} 
+                  <CurrencyInput
+                    value={formState.managementFee}
+                    onChange={(v) => updateField('managementFee', v)}
                     suffix="%"
                   />
                 </div>
@@ -192,16 +192,16 @@ const SetupView: React.FC<SetupViewProps> = ({
           </div>
 
           <div className="mt-16 flex flex-col items-center">
-            <button 
+            <button
               onClick={handleRunClick}
-              className="group relative bg-slate-900 text-white px-20 py-5 rounded-full font-bold text-lg hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 overflow-hidden"
+              className="group relative bg-emerald-900 text-white px-20 py-5 rounded-lg font-bold text-lg hover:bg-emerald-800 transition-all shadow-xl shadow-slate-200 overflow-hidden"
             >
               <span className="relative z-10">Run Simulation</span>
               <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
             </button>
             <p className="mt-6 text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">Generates 4 Strategic Scenarios</p>
           </div>
-          
+
           <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex gap-1">
             <div className="w-1 h-1 rounded-full bg-slate-200"></div>
             <div className="w-1 h-1 rounded-full bg-slate-200"></div>
@@ -211,27 +211,27 @@ const SetupView: React.FC<SetupViewProps> = ({
 
         {/* Educational Content Section */}
         <div className="max-w-4xl mx-auto mt-20 pt-10 border-t border-slate-200">
-           <h3 className="text-xl font-serif text-slate-900 mb-8 text-center">Understanding the Simulation Model</h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="bg-white p-8 rounded-xl border border-slate-100 shadow-sm">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-primary">function</span>
-                </div>
-                <h4 className="font-bold text-slate-900 mb-2">What is Monte Carlo?</h4>
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  Instead of assuming a steady return (e.g., 7% every year), a Monte Carlo simulation uses random sampling to generate thousands of possible market scenarios based on historical volatility. This helps identify the probability of running out of money in "worst-case" scenarios.
-                </p>
+          <h3 className="text-xl font-serif text-slate-900 mb-8 text-center">Understanding the Simulation Model</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div className="bg-white p-8 rounded-xl border border-slate-100 shadow-sm">
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                <span className="material-symbols-outlined text-primary">function</span>
               </div>
-              <div className="bg-white p-8 rounded-xl border border-slate-100 shadow-sm">
-                 <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-primary">tune</span>
-                </div>
-                <h4 className="font-bold text-slate-900 mb-2">Why Strategy Matters?</h4>
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  The allocation between Stocks (growth) and Bonds (stability) determines your portfolio's resilience. The <strong>Bucket Strategy</strong> is unique: it keeps 2 years of cash on hand to avoid selling stocks during market crashes, potentially increasing longevity.
-                </p>
+              <h4 className="font-bold text-slate-900 mb-2">What is Monte Carlo?</h4>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Instead of assuming a steady return (e.g., 7% every year), a Monte Carlo simulation uses random sampling to generate thousands of possible market scenarios based on historical volatility. This helps identify the probability of running out of money in "worst-case" scenarios.
+              </p>
+            </div>
+            <div className="bg-white p-8 rounded-xl border border-slate-100 shadow-sm">
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                <span className="material-symbols-outlined text-primary">tune</span>
               </div>
-           </div>
+              <h4 className="font-bold text-slate-900 mb-2">Why Strategy Matters?</h4>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                The allocation between Stocks (growth) and Bonds (stability) determines your portfolio's resilience. The <strong>Bucket Strategy</strong> is unique: it keeps 2 years of cash on hand to avoid selling stocks during market crashes, potentially increasing longevity.
+              </p>
+            </div>
+          </div>
         </div>
       </main>
 
