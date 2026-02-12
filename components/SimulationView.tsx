@@ -78,8 +78,8 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const getStrategyName = (s: StrategyType) => {
     switch (s) {
       case 'BUCKET': return 'Bucket Strategy';
-      case 'CONSERVATIVE': return '40/60 Split';
-      case 'AGGRESSIVE': return '30/70 Split';
+      case 'CONSERVATIVE': return '60/40 Split';
+      case 'AGGRESSIVE': return '70/30 Split';
       case 'CUSTOM': return 'Custom Allocation';
     }
   };
@@ -137,7 +137,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   };
 
   const handleDownloadCSV = () => {
-    const headers = ['Year', 'Average Market', 'Below Average', 'Downturn Scenario'];
+    const headers = ['Year', 'Average Market', 'Below Average', 'Significant Downturn'];
     const rows = results.data.map(d => [
       d.year,
       d.average ? d.average.toFixed(2) : '0.00',
@@ -222,13 +222,13 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               <span className="material-symbols-outlined text-slate-900 text-2xl font-bold">query_stats</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 hidden md:block">Retirement Simulation Analysis</h1>
+              <h1 className="text-xl font-bold font-serif tracking-tight text-slate-900 hidden md:block">Retirement Simulation Analysis</h1>
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Monte Carlo Engine v4.2</p>
             </div>
           </div>
           <div className="flex items-center gap-6">
             <div className="hidden md:flex items-center gap-3 px-5 py-2 bg-slate-50 rounded-full border border-slate-200">
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Confidence Score</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase">Success Rate</span>
               <span className={`text-xs font-bold ${results.successRate > 90 ? 'text-emerald-600' : results.successRate > 75 ? 'text-amber-600' : 'text-red-600'}`}>
                 {results.successRate.toFixed(1)}% ({results.successRate > 90 ? 'High' : 'Moderate'})
               </span>
@@ -254,7 +254,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             </div>
             <div className="w-px h-8 bg-slate-200"></div>
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Annual Spend</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Annual Spend (Today's $)</span>
               <span className="text-base font-bold text-slate-800">${inputs.annualSpend.toLocaleString()}</span>
             </div>
             <div className="w-px h-8 bg-slate-200"></div>
@@ -292,8 +292,8 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   }`}
               >
                 {t === 'BUCKET' && 'Bucket Strategy'}
-                {t === 'CONSERVATIVE' && '40/60 Split'}
-                {t === 'AGGRESSIVE' && '30/70 Split'}
+                {t === 'CONSERVATIVE' && '60/40 Split'}
+                {t === 'AGGRESSIVE' && '70/30 Split'}
                 {t === 'CUSTOM' && (
                   <span className="flex items-center gap-2">
                     Custom Allocation
@@ -312,7 +312,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl p-6 md:p-10 shadow-sm mb-10">
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-1">Portfolio Projection</h2>
+                  <h2 className="text-2xl font-bold font-serif text-slate-900 mb-1">Portfolio Projection</h2>
                   <p className="text-sm text-slate-500 font-medium">10,000 market scenarios simulated <span className="text-slate-300 mx-2">•</span> Last Run: {runTime}</p>
                 </div>
 
@@ -354,7 +354,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-downturn-red"></span>
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Severe Downturn</span>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Significant Downturn</span>
                     </div>
                   </div>
                 </div>
@@ -460,18 +460,24 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   <span className="material-symbols-outlined text-blue-600 text-lg">help</span>
                   How to read this chart
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-600 leading-relaxed">
+                <div className="p-6 bg-slate-50 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <span className="block font-bold text-growth-green mb-1">Average Market (Green)</span>
-                    Represents the median outcome (50th percentile). In 50% of historical scenarios, your portfolio performed better than this line. This is a realistic target for "normal" market conditions.
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Represents the median outcome (50th percentile). In 50% of historical scenarios, your portfolio performed better than this line. This is a realistic target for "normal" market conditions.
+                    </p>
                   </div>
                   <div>
                     <span className="block font-bold text-below-avg-gold mb-1">Below Average (Gold)</span>
-                    The 25th percentile outcome. This line shows a sluggish market environment where growth is consistently lower than historical averages. Good for conservative planning.
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      The 25th percentile outcome. This line shows a sluggish market environment where growth is consistently lower than historical averages. Good for conservative planning.
+                    </p>
                   </div>
                   <div>
                     <span className="block font-bold text-downturn-red mb-1">Significant Downturn (Red)</span>
-                    The 10th percentile "stress test". This simulates a prolonged recession or poor sequence of returns. If this line stays above $0, your plan is highly resilient.
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      The 10th percentile "stress test". This simulates a prolonged recession or poor sequence of returns. If this line stays above $0, your plan is highly resilient.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -481,7 +487,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-10">
               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
-                  <h3 className="text-lg font-bold text-slate-900 whitespace-nowrap">
+                  <h3 className="text-lg font-bold font-serif text-slate-900 whitespace-nowrap">
                     {auditMode ? 'Audit Strategy Log' : 'Yearly Balance Projection'}
                   </h3>
                   {/* Checkbox Button */}
@@ -507,19 +513,19 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                         onClick={() => setAuditScenario('AVERAGE')}
                         className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'AVERAGE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        Avg Scenario
+                        Average Market
                       </button>
                       <button
                         onClick={() => setAuditScenario('BELOW')}
                         className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'BELOW' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        Below Avg
+                        Below Average
                       </button>
                       <button
                         onClick={() => setAuditScenario('DOWNTURN')}
                         className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'DOWNTURN' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        Downturn
+                        Significant Downturn
                       </button>
                     </div>
                   )}
@@ -556,7 +562,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                         <th className="px-6 py-4 bg-slate-50">Year</th>
                         <th className="px-6 py-4 bg-slate-50 text-growth-green">Average Market</th>
                         <th className="px-6 py-4 bg-slate-50 text-below-avg-gold">Below Average</th>
-                        <th className="px-6 py-4 bg-slate-50 text-downturn-red">Downturn Scenario</th>
+                        <th className="px-6 py-4 bg-slate-50 text-downturn-red">Significant Downturn</th>
                       </tr>
                     </thead>
                   )}
@@ -703,7 +709,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
 
             <div className="bg-white border border-slate-200 rounded-xl p-6 text-center shadow-sm">
               <p className="text-[10px] font-bold text-primary uppercase mb-2 tracking-[0.2em]">Simulation Core</p>
-              <p className="text-xs text-slate-500 mb-6 leading-relaxed">Historical datasets from 1926-2023 used for variance modeling.</p>
+              <p className="text-xs text-slate-500 mb-6 leading-relaxed">Parametric model calibrated to long-term historical averages for variance modeling.</p>
             </div>
           </aside>
         </div>

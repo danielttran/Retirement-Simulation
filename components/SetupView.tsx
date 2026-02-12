@@ -199,7 +199,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               <span className="relative z-10">Run Simulation</span>
               <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
             </button>
-            <p className="mt-6 text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">Generates 4 Strategic Scenarios</p>
+            <p className="mt-6 text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">10,000 Monte Carlo Simulations Per Strategy</p>
           </div>
 
           <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex gap-1">
@@ -236,7 +236,7 @@ const SetupView: React.FC<SetupViewProps> = ({
       </main>
 
       <footer className="max-w-7xl mx-auto px-8 py-16 border-t border-slate-50 mt-20 flex flex-col md:flex-row justify-between items-center gap-6">
-        <p className="text-slate-400 text-[10px] font-medium uppercase tracking-widest">© 2024 Strategy Lab • Private & Confidential Financial Simulation</p>
+        <p className="text-slate-400 text-[10px] font-medium uppercase tracking-widest">© {new Date().getFullYear()} Strategy Lab • Private & Confidential Financial Simulation</p>
       </footer>
     </div>
   );
