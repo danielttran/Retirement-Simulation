@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import SetupView from './components/SetupView';
 import SimulationView from './components/SimulationView';
 import { SimulationInputs, StrategyType, SimulationResult } from './types';
@@ -6,8 +6,20 @@ import { runSimulation } from './services/monteCarlo';
 
 type View = 'SETUP' | 'SIMULATION';
 
+// Loading overlay component
+const LoadingOverlay: React.FC = () => (
+  <div className="fixed inset-0 z-[9999] bg-background-light/80 backdrop-blur-sm flex items-center justify-center">
+    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-10 flex flex-col items-center gap-4">
+      <div className="w-10 h-10 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
+      <p className="text-sm font-bold text-slate-700">Running Simulation</p>
+      <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">10,000 Scenarios</p>
+    </div>
+  </div>
+);
+
 const App: React.FC = () => {
   const [view, setView] = useState<View>('SETUP');
+  const [isSimulating, setIsSimulating] = useState(false);
 
   // Default inputs
   const [inputs, setInputs] = useState<SimulationInputs>({
@@ -16,25 +28,42 @@ const App: React.FC = () => {
     annualSpend: 30000,
     timeHorizon: 30,
     inflationRate: 3.0,
-    managementFee: 0.30, // Updated default to 0.30% which is realistic
+    managementFee: 0.30,
     customStockAllocation: 50
   });
 
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType>('BUCKET');
   const [results, setResults] = useState<SimulationResult | null>(null);
 
+  // Deferred simulation runner — yields to the main thread so loading UI renders
+  const runSimulationAsync = useCallback((simInputs: SimulationInputs, strategy: StrategyType, onComplete?: () => void) => {
+    setIsSimulating(true);
+    // setTimeout(0) yields to the browser so the loading overlay paints
+    setTimeout(() => {
+      try {
+        const res = runSimulation(simInputs, strategy);
+        setResults(res);
+      } catch (err) {
+        console.error('Simulation error:', err);
+      } finally {
+        setIsSimulating(false);
+        onComplete?.();
+      }
+    }, 50);
+  }, []);
+
   const handleRunSimulation = (finalInputs: SimulationInputs) => {
-    setInputs(finalInputs); // Update global state
-    const res = runSimulation(finalInputs, selectedStrategy);
-    setResults(res);
-    setView('SIMULATION');
-    window.scrollTo(0, 0);
+    setInputs(finalInputs);
+    runSimulationAsync(finalInputs, selectedStrategy, () => {
+      setView('SIMULATION');
+      window.scrollTo(0, 0);
+    });
   };
 
   const handleCustomAllocationChange = (newAlloc: number) => {
     setInputs(prev => {
       const updated = { ...prev, customStockAllocation: newAlloc };
-      // Re-run immediately for live slider feeling
+      // Re-run immediately for live slider feeling (no loading overlay for this)
       const res = runSimulation(updated, 'CUSTOM');
       setResults(res);
       return updated;
@@ -44,13 +73,14 @@ const App: React.FC = () => {
   // If strategy changes in simulation view, re-run
   useEffect(() => {
     if (view === 'SIMULATION') {
-      const res = runSimulation(inputs, selectedStrategy);
-      setResults(res);
+      runSimulationAsync(inputs, selectedStrategy);
     }
-  }, [selectedStrategy, view]); // Removed inputs from dependency to avoid loop, handleCustomAllocationChange handles its own run
+  }, [selectedStrategy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
+      {isSimulating && <LoadingOverlay />}
+
       {view === 'SETUP' && (
         <SetupView
           defaultInputs={inputs}
@@ -65,10 +95,7 @@ const App: React.FC = () => {
           selectedStrategy={selectedStrategy}
           setSelectedStrategy={setSelectedStrategy}
           onEdit={() => setView('SETUP')}
-          onRun={() => {
-            const res = runSimulation(inputs, selectedStrategy);
-            setResults(res);
-          }}
+          onRun={() => runSimulationAsync(inputs, selectedStrategy)}
           onCustomAllocationChange={handleCustomAllocationChange}
         />
       )}

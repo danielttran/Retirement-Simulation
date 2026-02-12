@@ -83,7 +83,24 @@ const SetupView: React.FC<SetupViewProps> = ({
     setFormState(prev => ({ ...prev, [field]: val }));
   };
 
+  // Input validation
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = [];
+    const totalPortfolio = formState.initialCash + formState.initialInvestments;
+    if (totalPortfolio <= 0) errors.push('Total portfolio must be greater than $0.');
+    if (formState.annualSpend <= 0) errors.push('Annual spending must be greater than $0.');
+    if (formState.annualSpend >= totalPortfolio) errors.push('Annual spending must be less than total portfolio.');
+    if (formState.timeHorizon < 5 || formState.timeHorizon > 50) errors.push('Time horizon must be 5–50 years.');
+    if (formState.inflationRate < 0 || formState.inflationRate > 15) errors.push('Inflation rate must be 0–15%.');
+    if (formState.managementFee < 0 || formState.managementFee > 5) errors.push('Management fee must be 0–5%.');
+    return errors;
+  };
+
+  const validationErrors = getValidationErrors();
+  const isValid = validationErrors.length === 0;
+
   const handleRunClick = () => {
+    if (!isValid) return;
     onRun(formState);
   };
 
@@ -192,12 +209,27 @@ const SetupView: React.FC<SetupViewProps> = ({
           </div>
 
           <div className="mt-16 flex flex-col items-center">
+            {validationErrors.length > 0 && (
+              <div className="mb-4 max-w-md w-full bg-red-50 border border-red-200 rounded-lg p-4">
+                {validationErrors.map((err, i) => (
+                  <p key={i} className="text-xs text-red-600 flex items-center gap-2 mb-1 last:mb-0">
+                    <span className="material-symbols-outlined text-sm">warning</span>
+                    {err}
+                  </p>
+                ))}
+              </div>
+            )}
             <button
               onClick={handleRunClick}
-              className="group relative bg-emerald-900 text-white px-20 py-5 rounded-lg font-bold text-sm uppercase tracking-wider hover:bg-emerald-800 transition-all shadow-xl shadow-slate-200 overflow-hidden"
+              disabled={!isValid}
+              aria-label="Run Monte Carlo simulation"
+              className={`group relative px-20 py-5 rounded-lg font-bold text-sm uppercase tracking-wider transition-all shadow-xl shadow-slate-200 overflow-hidden ${isValid
+                  ? 'bg-emerald-900 text-white hover:bg-emerald-800 cursor-pointer'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                }`}
             >
               <span className="relative z-10">Run Simulation</span>
-              <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+              {isValid && <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>}
             </button>
             <p className="mt-6 text-[11px] font-semibold text-slate-300 uppercase tracking-wider">10,000 Monte Carlo Simulations Per Strategy</p>
           </div>

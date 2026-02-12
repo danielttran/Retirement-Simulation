@@ -235,6 +235,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             </div>
             <button
               onClick={handleExportReport}
+              aria-label="Export simulation report"
               className="bg-emerald-900 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-emerald-800 transition-all flex items-center gap-2 shadow-md cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">download_for_offline</span>
@@ -270,6 +271,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
           </div>
           <button
             onClick={onEdit}
+            aria-label="Adjust simulation inputs"
             className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-5 py-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
           >
             <span className="material-symbols-outlined text-sm leading-none">settings_input_component</span>
@@ -281,10 +283,12 @@ const SimulationView: React.FC<SimulationViewProps> = ({
       <main className="max-w-[1440px] mx-auto px-6 md:px-10 py-10">
         {/* Strategy Tabs */}
         <div className="mb-10 border-b border-slate-200 overflow-x-auto">
-          <div className="flex gap-8 md:gap-12 min-w-max">
+          <div className="flex gap-8 md:gap-12 min-w-max" role="tablist" aria-label="Investment strategies">
             {(['BUCKET', 'CONSERVATIVE', 'AGGRESSIVE', 'CUSTOM'] as StrategyType[]).map((t) => (
               <button
                 key={t}
+                role="tab"
+                aria-selected={selectedStrategy === t}
                 onClick={() => handleStrategyChange(t)}
                 className={`pb-5 text-sm font-medium transition-all border-b-2 ${selectedStrategy === t
                   ? 'text-slate-900 border-primary font-bold'
