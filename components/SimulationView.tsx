@@ -222,20 +222,20 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               <span className="material-symbols-outlined text-slate-900 text-2xl font-bold">query_stats</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold font-serif tracking-tight text-slate-900 hidden md:block">Retirement Simulation Analysis</h1>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Monte Carlo Engine v4.2</p>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900 hidden md:block">Retirement Simulation Analysis</h1>
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Monte Carlo Engine</p>
             </div>
           </div>
           <div className="flex items-center gap-6">
             <div className="hidden md:flex items-center gap-3 px-5 py-2 bg-slate-50 rounded-full border border-slate-200">
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Success Rate</span>
+              <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Success Rate</span>
               <span className={`text-xs font-bold ${results.successRate > 90 ? 'text-emerald-600' : results.successRate > 75 ? 'text-amber-600' : 'text-red-600'}`}>
                 {results.successRate.toFixed(1)}% ({results.successRate > 90 ? 'High' : 'Moderate'})
               </span>
             </div>
             <button
               onClick={handleExportReport}
-              className="bg-emerald-900 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-800 transition-all flex items-center gap-2 shadow-md cursor-pointer"
+              className="bg-emerald-900 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-emerald-800 transition-all flex items-center gap-2 shadow-md cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">download_for_offline</span>
               <span className="hidden md:inline">Export Report</span>
@@ -249,28 +249,28 @@ const SimulationView: React.FC<SimulationViewProps> = ({
         <div className="max-w-[1440px] mx-auto px-6 md:px-10 py-4 flex items-center justify-between overflow-x-auto gap-8 no-scrollbar">
           <div className="flex items-center gap-10 shrink-0">
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Portfolio</span>
-              <span className="text-base font-bold text-slate-800">${(inputs.initialCash + inputs.initialInvestments).toLocaleString()}</span>
+              <span className="text-[11px] uppercase font-semibold text-slate-400 tracking-wider">Total Portfolio</span>
+              <span className="text-sm font-bold text-slate-800">${(inputs.initialCash + inputs.initialInvestments).toLocaleString()}</span>
             </div>
             <div className="w-px h-8 bg-slate-200"></div>
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Annual Spend (Today's $)</span>
-              <span className="text-base font-bold text-slate-800">${inputs.annualSpend.toLocaleString()}</span>
+              <span className="text-[11px] uppercase font-semibold text-slate-400 tracking-wider">Annual Spend (Today's $)</span>
+              <span className="text-sm font-bold text-slate-800">${inputs.annualSpend.toLocaleString()}</span>
             </div>
             <div className="w-px h-8 bg-slate-200"></div>
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Start Year</span>
-              <span className="text-base font-bold text-slate-800">{startYear}</span>
+              <span className="text-[11px] uppercase font-semibold text-slate-400 tracking-wider">Start Year</span>
+              <span className="text-sm font-bold text-slate-800">{startYear}</span>
             </div>
             <div className="w-px h-8 bg-slate-200"></div>
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Time Horizon</span>
-              <span className="text-base font-bold text-slate-800">{inputs.timeHorizon} Years</span>
+              <span className="text-[11px] uppercase font-semibold text-slate-400 tracking-wider">Time Horizon</span>
+              <span className="text-sm font-bold text-slate-800">{inputs.timeHorizon} Years</span>
             </div>
           </div>
           <button
             onClick={onEdit}
-            className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-5 py-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer"
+            className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-5 py-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
           >
             <span className="material-symbols-outlined text-sm leading-none">settings_input_component</span>
             Adjust Inputs
@@ -312,8 +312,8 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl p-6 md:p-10 shadow-sm mb-10">
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                 <div>
-                  <h2 className="text-2xl font-bold font-serif text-slate-900 mb-1">Portfolio Projection</h2>
-                  <p className="text-sm text-slate-500 font-medium">10,000 market scenarios simulated <span className="text-slate-300 mx-2">•</span> Last Run: {runTime}</p>
+                  <h2 className="text-lg font-bold text-slate-900 mb-1">Portfolio Projection</h2>
+                  <p className="text-xs text-slate-500 font-medium">10,000 market scenarios simulated <span className="text-slate-300 mx-2">•</span> Last Run: {runTime}</p>
                 </div>
 
                 <div className="flex flex-col md:items-end gap-4">
@@ -323,7 +323,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                       <button
                         key={year}
                         onClick={() => setViewDuration(year)}
-                        className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${viewDuration === year
+                        className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${viewDuration === year
                           ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
                           : 'text-slate-500 hover:text-slate-900'
                           }`}
@@ -333,7 +333,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                     ))}
                     <button
                       onClick={() => setViewDuration('MAX')}
-                      className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-md transition-all ${viewDuration === 'MAX'
+                      className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${viewDuration === 'MAX'
                         ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
                         : 'text-slate-500 hover:text-slate-900'
                         }`}
@@ -346,15 +346,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   <div className="flex flex-wrap items-center gap-4 md:gap-6">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-growth-green"></span>
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Average Market</span>
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Average Market</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-below-avg-gold"></span>
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Below Average</span>
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Below Average</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-downturn-red"></span>
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Significant Downturn</span>
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Significant Downturn</span>
                     </div>
                   </div>
                 </div>
@@ -364,7 +364,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               {selectedStrategy === 'CUSTOM' && (
                 <div className="mb-8 p-6 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in slide-in-from-top-2">
                   <div className="flex justify-between items-center mb-4">
-                    <label className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Stock / Bond Allocation
                     </label>
                     <span className="text-sm font-bold bg-white px-3 py-1 rounded border border-slate-200 shadow-sm">
@@ -456,25 +456,25 @@ const SimulationView: React.FC<SimulationViewProps> = ({
 
               {/* Chart Explanation */}
               <div className="mt-8 p-6 bg-blue-50/50 rounded-xl border border-blue-100">
-                <h4 className="text-sm font-bold text-slate-900 mb-2 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-blue-600 text-lg">help</span>
+                <h4 className="text-xs font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-lg text-blue-600">help</span>
                   How to read this chart
                 </h4>
                 <div className="p-6 bg-slate-50 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <span className="block font-bold text-growth-green mb-1">Average Market (Green)</span>
+                    <span className="block font-bold text-growth-green text-xs mb-1">Average Market (Green)</span>
                     <p className="text-xs text-slate-500 leading-relaxed">
                       Represents the median outcome (50th percentile). In 50% of historical scenarios, your portfolio performed better than this line. This is a realistic target for "normal" market conditions.
                     </p>
                   </div>
                   <div>
-                    <span className="block font-bold text-below-avg-gold mb-1">Below Average (Gold)</span>
+                    <span className="block font-bold text-below-avg-gold text-xs mb-1">Below Average (Gold)</span>
                     <p className="text-xs text-slate-500 leading-relaxed">
                       The 25th percentile outcome. This line shows a sluggish market environment where growth is consistently lower than historical averages. Good for conservative planning.
                     </p>
                   </div>
                   <div>
-                    <span className="block font-bold text-downturn-red mb-1">Significant Downturn (Red)</span>
+                    <span className="block font-bold text-downturn-red text-xs mb-1">Significant Downturn (Red)</span>
                     <p className="text-xs text-slate-500 leading-relaxed">
                       The 10th percentile "stress test". This simulates a prolonged recession or poor sequence of returns. If this line stays above $0, your plan is highly resilient.
                     </p>
@@ -487,7 +487,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-10">
               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center gap-4">
-                  <h3 className="text-lg font-bold font-serif text-slate-900 whitespace-nowrap">
+                  <h3 className="text-base font-bold text-slate-900 whitespace-nowrap">
                     {auditMode ? 'Audit Strategy Log' : 'Yearly Balance Projection'}
                   </h3>
                   {/* Checkbox Button */}
@@ -501,29 +501,29 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                       checked={auditMode}
                       onChange={() => setAuditMode(!auditMode)}
                     />
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-slate-800 transition-colors">Audit Mode (Verify Math)</span>
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider group-hover:text-slate-800 transition-colors">Audit Mode (Verify Math)</span>
                   </label>
                 </div>
 
                 <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-                  {!auditMode && <span className="text-[10px] text-slate-400 font-bold uppercase hidden md:inline">Last Updated: {runTime}</span>}
+                  {!auditMode && <span className="text-[11px] text-slate-400 font-semibold uppercase hidden md:inline tracking-wider">Last Updated: {runTime}</span>}
                   {auditMode && (
                     <div className="flex bg-slate-100 p-1 rounded-lg">
                       <button
                         onClick={() => setAuditScenario('AVERAGE')}
-                        className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'AVERAGE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${auditScenario === 'AVERAGE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
                         Average Market
                       </button>
                       <button
                         onClick={() => setAuditScenario('BELOW')}
-                        className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'BELOW' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${auditScenario === 'BELOW' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
                         Below Average
                       </button>
                       <button
                         onClick={() => setAuditScenario('DOWNTURN')}
-                        className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${auditScenario === 'DOWNTURN' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${auditScenario === 'DOWNTURN' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                       >
                         Significant Downturn
                       </button>
@@ -531,7 +531,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   )}
                   <button
                     onClick={handleDownloadCSV}
-                    className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-4 py-2 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer"
+                    className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-4 py-2 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
                   >
                     <span>Download CSV</span>
                     <span className="material-symbols-outlined text-sm leading-none">download</span>
@@ -632,28 +632,28 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 hover:shadow-md transition-shadow">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Success Probability</span>
-                <span className="text-3xl font-bold text-slate-900">{results.successRate.toFixed(1)}%</span>
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Success Probability</span>
+                <span className="text-2xl font-bold text-slate-900">{results.successRate.toFixed(1)}%</span>
                 <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
                   <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : 'Monitor Closely'}
                 </span>
                 <p className="text-[10px] text-slate-400 mt-2 leading-tight">Percentage of simulations where portfolio &gt; $0 at end of term.</p>
               </div>
               <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 hover:shadow-md transition-shadow">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Expected Final Value</span>
-                <span className="text-3xl font-bold text-average-blue">{formatCurrency(results.finalMedianValue)}</span>
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Expected Final Value</span>
+                <span className="text-2xl font-bold text-average-blue">{formatCurrency(results.finalMedianValue)}</span>
                 <span className="text-xs text-slate-400 mt-1">Real Dollars (Today's Purchasing Power)</span>
                 <p className="text-[10px] text-slate-400 mt-2 leading-tight">The median projected purchasing power in {startYear + inputs.timeHorizon}. Adjusted for inflation.</p>
               </div>
               <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 hover:shadow-md transition-shadow">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Projected Volatility</span>
-                <span className="text-3xl font-bold text-slate-900">{results.volatility.toFixed(1)}%</span>
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Projected Volatility</span>
+                <span className="text-2xl font-bold text-slate-900">{results.volatility.toFixed(1)}%</span>
                 <span className="text-xs text-amber-600 font-bold mt-1">Annualized</span>
                 <p className="text-[10px] text-slate-400 mt-2 leading-tight">Typical annual swing in portfolio value based on this strategy.</p>
               </div>
               <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 hover:shadow-md transition-shadow">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Starting Safe Withdrawal</span>
-                <span className="text-3xl font-bold text-slate-900">{((inputs.annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Starting Safe Withdrawal</span>
+                <span className="text-2xl font-bold text-slate-900">{((inputs.annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
                 <span className="text-xs text-slate-400 mt-1">Initial Rate</span>
                 <p className="text-[10px] text-slate-400 mt-2 leading-tight">Recommended safe rate is typically 3.5% - 4.0%.</p>
               </div>
@@ -665,14 +665,14 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -mr-16 -mt-16"></div>
               <div className="relative">
-                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <h3 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-6 flex items-center gap-2">
                   <span className="material-symbols-outlined text-lg text-primary">info</span>
                   Strategy Insight
                 </h3>
                 <div className="space-y-6 text-xs leading-relaxed text-slate-500 font-medium">
                   {getStrategyDescription(selectedStrategy)}
                   <div className="space-y-4 pt-2">
-                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Active Weights (Target)</h4>
+                    <h4 className="text-[11px] font-bold text-slate-900 uppercase tracking-wider">Active Weights (Target)</h4>
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between items-center text-[11px] mb-2">
@@ -708,7 +708,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-6 text-center shadow-sm">
-              <p className="text-[10px] font-bold text-primary uppercase mb-2 tracking-[0.2em]">Simulation Core</p>
+              <p className="text-[11px] font-semibold text-primary uppercase mb-2 tracking-wider">Simulation Core</p>
               <p className="text-xs text-slate-500 mb-6 leading-relaxed">Parametric model calibrated to long-term historical averages for variance modeling.</p>
             </div>
           </aside>

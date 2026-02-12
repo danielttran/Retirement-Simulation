@@ -98,8 +98,8 @@ const SetupView: React.FC<SetupViewProps> = ({
             <span className="text-sm font-bold tracking-widest uppercase text-slate-800">Strategy Lab</span>
           </div>
           <div className="flex items-center gap-8">
-            <a href="#" className="text-xs font-semibold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-widest">Dashboard</a>
-            <a href="#" className="text-xs font-semibold text-slate-900 border-b-2 border-primary pb-1 uppercase tracking-widest">Simulation</a>
+            <a href="#" className="text-[11px] font-semibold text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-wider">Dashboard</a>
+            <a href="#" className="text-[11px] font-semibold text-slate-900 border-b-2 border-primary pb-1 uppercase tracking-wider">Simulation</a>
             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
               <span className="material-symbols-outlined text-sm">person</span>
             </div>
@@ -109,8 +109,8 @@ const SetupView: React.FC<SetupViewProps> = ({
 
       <main className="max-w-7xl mx-auto px-8 py-20">
         <div className="max-w-3xl mx-auto text-center mb-20">
-          <h1 className="font-serif text-5xl text-slate-900 mb-6">Retirement Simulation Setup</h1>
-          <p className="text-slate-500 text-lg font-light leading-relaxed">
+          <h1 className="text-3xl font-bold text-slate-900 mb-6">Retirement Simulation Setup</h1>
+          <p className="text-slate-500 text-sm font-light leading-relaxed">
             Configure your financial parameters. Our engine will simultaneously run multiple strategic scenarios—from cash-bucket approaches to bond-heavy allocations—to find your optimal path.
           </p>
         </div>
@@ -119,35 +119,35 @@ const SetupView: React.FC<SetupViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
             {/* Left Column - Assets */}
             <div className="space-y-8">
-              <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">Assets</h3>
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Assets</h3>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Total Cash Savings</label>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Total Cash Savings</label>
                 <CurrencyInput
                   value={formState.initialCash}
                   onChange={(v) => updateField('initialCash', v)}
                   prefix="$"
                   suffix="USD"
                 />
-                <p className="text-[10px] text-slate-400 mt-2">Cash, Savings, CDs, and other liquid equivalents.</p>
+                <p className="text-[11px] text-slate-400 mt-2">Cash, Savings, CDs, and other liquid equivalents.</p>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Investment Portfolio</label>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Investment Portfolio</label>
                 <CurrencyInput
                   value={formState.initialInvestments}
                   onChange={(v) => updateField('initialInvestments', v)}
                   prefix="$"
                   suffix="USD"
                 />
-                <p className="text-[10px] text-slate-400 mt-2">Total value of Stocks, Bonds, ETFs, and Mutual Funds.</p>
+                <p className="text-[11px] text-slate-400 mt-2">Total value of Stocks, Bonds, ETFs, and Mutual Funds.</p>
               </div>
             </div>
 
             {/* Right Column - Variables */}
             <div className="space-y-8">
-              <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">Variables</h3>
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Variables</h3>
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Annual Retirement Spending</label>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Annual Retirement Spending</label>
                 <CurrencyInput
                   value={formState.annualSpend}
                   onChange={(v) => updateField('annualSpend', v)}
@@ -157,7 +157,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Simulation Time Horizon</label>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Simulation Time Horizon</label>
                 <div className="flex items-center gap-4">
                   <input
                     className="w-full h-1 bg-slate-200 accent-primary rounded-lg appearance-none cursor-pointer"
@@ -172,7 +172,7 @@ const SetupView: React.FC<SetupViewProps> = ({
 
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Inflation Rate</label>
+                  <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Inflation Rate</label>
                   <CurrencyInput
                     value={formState.inflationRate}
                     onChange={(v) => updateField('inflationRate', v)}
@@ -180,7 +180,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Management Fee</label>
+                  <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Management Fee</label>
                   <CurrencyInput
                     value={formState.managementFee}
                     onChange={(v) => updateField('managementFee', v)}
@@ -194,12 +194,12 @@ const SetupView: React.FC<SetupViewProps> = ({
           <div className="mt-16 flex flex-col items-center">
             <button
               onClick={handleRunClick}
-              className="group relative bg-emerald-900 text-white px-20 py-5 rounded-lg font-bold text-lg hover:bg-emerald-800 transition-all shadow-xl shadow-slate-200 overflow-hidden"
+              className="group relative bg-emerald-900 text-white px-20 py-5 rounded-lg font-bold text-sm uppercase tracking-wider hover:bg-emerald-800 transition-all shadow-xl shadow-slate-200 overflow-hidden"
             >
               <span className="relative z-10">Run Simulation</span>
               <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
             </button>
-            <p className="mt-6 text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">10,000 Monte Carlo Simulations Per Strategy</p>
+            <p className="mt-6 text-[11px] font-semibold text-slate-300 uppercase tracking-wider">10,000 Monte Carlo Simulations Per Strategy</p>
           </div>
 
           <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex gap-1">
@@ -211,13 +211,13 @@ const SetupView: React.FC<SetupViewProps> = ({
 
         {/* Educational Content Section */}
         <div className="max-w-4xl mx-auto mt-20 pt-10 border-t border-slate-200">
-          <h3 className="text-xl font-serif text-slate-900 mb-8 text-center">Understanding the Simulation Model</h3>
+          <h3 className="text-base font-bold text-slate-900 mb-8 text-center">Understanding the Simulation Model</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             <div className="bg-white p-8 rounded-xl border border-slate-100 shadow-sm">
               <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-primary">function</span>
               </div>
-              <h4 className="font-bold text-slate-900 mb-2">What is Monte Carlo?</h4>
+              <h4 className="text-xs font-bold text-slate-900 mb-2">What is Monte Carlo?</h4>
               <p className="text-sm text-slate-500 leading-relaxed">
                 Instead of assuming a steady return (e.g., 7% every year), a Monte Carlo simulation uses random sampling to generate thousands of possible market scenarios based on historical volatility. This helps identify the probability of running out of money in "worst-case" scenarios.
               </p>
@@ -226,7 +226,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-primary">tune</span>
               </div>
-              <h4 className="font-bold text-slate-900 mb-2">Why Strategy Matters?</h4>
+              <h4 className="text-xs font-bold text-slate-900 mb-2">Why Strategy Matters?</h4>
               <p className="text-sm text-slate-500 leading-relaxed">
                 The allocation between Stocks (growth) and Bonds (stability) determines your portfolio's resilience. The <strong>Bucket Strategy</strong> is unique: it keeps 2 years of cash on hand to avoid selling stocks during market crashes, potentially increasing longevity.
               </p>
@@ -236,7 +236,7 @@ const SetupView: React.FC<SetupViewProps> = ({
       </main>
 
       <footer className="max-w-7xl mx-auto px-8 py-16 border-t border-slate-50 mt-20 flex flex-col md:flex-row justify-between items-center gap-6">
-        <p className="text-slate-400 text-[10px] font-medium uppercase tracking-widest">© {new Date().getFullYear()} Strategy Lab • Private & Confidential Financial Simulation</p>
+        <p className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">© {new Date().getFullYear()} Strategy Lab • Private & Confidential Financial Simulation</p>
       </footer>
     </div>
   );
