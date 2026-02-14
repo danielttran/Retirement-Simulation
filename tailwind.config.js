@@ -15,7 +15,7 @@ export default {
                 "background-dark": "#211f11",
                 "border-gold": "#e2e2d5",
                 "average-blue": "#1e40af",
-                "growth-green": "#059669",
+                "growth-green": "#16a34a",
                 "below-avg-gold": "#d97706",
                 "downturn-red": "#dc2626",
             },

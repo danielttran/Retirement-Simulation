@@ -224,8 +224,8 @@ const SetupView: React.FC<SetupViewProps> = ({
               disabled={!isValid}
               aria-label="Run Monte Carlo simulation"
               className={`group relative px-20 py-5 rounded-lg font-bold text-sm uppercase tracking-wider transition-all shadow-xl shadow-slate-200 overflow-hidden ${isValid
-                  ? 'bg-emerald-900 text-white hover:bg-emerald-800 cursor-pointer'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
+                : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                 }`}
             >
               <span className="relative z-10">Run Simulation</span>

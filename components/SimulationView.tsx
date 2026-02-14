@@ -12,16 +12,23 @@ interface CustomTooltipProps {
     dataKey?: string | number;
   }>;
   label?: string | number;
+  startYear: number;
 }
 
 // Typed tooltip props
-const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+const CustomTooltip = ({ active, payload, label, startYear }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
+    const yearNum = typeof label === 'number' ? label : parseInt(String(label));
+    const yearsAway = yearNum - startYear;
+
     return (
       <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xl min-w-[200px]">
         <div className="border-b border-slate-100 pb-2 mb-2">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Forecast Year</p>
-          <p className="text-sm font-bold text-slate-800">{label}</p>
+          <p className="text-sm font-bold text-slate-800">
+            {label}
+            {yearsAway > 0 && <span className="text-[10px] text-slate-400 font-normal ml-1">({yearsAway} years away)</span>}
+          </p>
         </div>
         <div className="space-y-1">
           {payload.map((entry, index) => (
@@ -218,9 +225,6 @@ const SimulationView: React.FC<SimulationViewProps> = ({
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-[1440px] mx-auto px-6 md:px-10 h-20 flex items-center justify-between">
           <div className="flex items-center gap-5">
-            <div className="w-10 h-10 bg-primary flex items-center justify-center rounded-xl shadow-sm cursor-pointer hover:bg-yellow-400 transition-colors" onClick={onEdit}>
-              <span className="material-symbols-outlined text-slate-900 text-2xl font-bold">query_stats</span>
-            </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-slate-900 hidden md:block">Retirement Simulation Analysis</h1>
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Monte Carlo Engine</p>
@@ -236,7 +240,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             <button
               onClick={handleExportReport}
               aria-label="Export simulation report"
-              className="bg-emerald-900 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-emerald-800 transition-all flex items-center gap-2 shadow-md cursor-pointer"
+              className="bg-green-600 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-green-700 transition-all flex items-center gap-2 shadow-md cursor-pointer"
             >
               <span className="material-symbols-outlined text-lg">download_for_offline</span>
               <span className="hidden md:inline">Export Report</span>
@@ -272,7 +276,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
           <button
             onClick={onEdit}
             aria-label="Adjust simulation inputs"
-            className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-5 py-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
+            className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-5 py-2.5 bg-green-600 hover:bg-green-700 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
           >
             <span className="material-symbols-outlined text-sm leading-none">settings_input_component</span>
             Adjust Inputs
@@ -422,7 +426,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                       tickFormatter={formatCurrency}
                       dx={-10}
                     />
-                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '5 5' }} />
+                    <Tooltip content={<CustomTooltip startYear={startYear} />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '5 5' }} />
                     <Area
                       type="monotone"
                       dataKey="average"
@@ -535,7 +539,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                   )}
                   <button
                     onClick={handleDownloadCSV}
-                    className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-4 py-2 bg-emerald-900 hover:bg-emerald-800 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
+                    className="flex items-center gap-2 text-xs font-bold text-white hover:text-white px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg shadow-md transition-all whitespace-nowrap cursor-pointer uppercase tracking-wider"
                   >
                     <span>Download CSV</span>
                     <span className="material-symbols-outlined text-sm leading-none">download</span>
@@ -576,7 +580,10 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                       // AUDIT TABLE ROWS
                       getAuditData().map((row) => (
                         <tr key={row.year} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-4 font-bold text-slate-700">{row.year}</td>
+                          <td className="px-4 py-4 font-bold text-slate-700 leading-tight">
+                            {row.year}
+                            {row.year - startYear > 0 && <div className="text-[10px] text-slate-400 font-normal">({row.year - startYear} years away)</div>}
+                          </td>
                           <td className="px-4 py-4 font-medium text-slate-600 text-xs">
                             <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                           </td>
@@ -702,7 +709,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                           <span className="font-bold text-slate-900">{(results.allocation.stock * 100).toFixed(1)}%</span>
                         </div>
                         <div className="w-full bg-slate-100 h-1.5 rounded-full">
-                          <div className="bg-slate-900 h-full rounded-full" style={{ width: `${results.allocation.stock * 100}%` }}></div>
+                          <div className="bg-green-600 h-full rounded-full" style={{ width: `${results.allocation.stock * 100}%` }}></div>
                         </div>
                       </div>
                     </div>
@@ -717,8 +724,8 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             </div>
           </aside>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 };
 
