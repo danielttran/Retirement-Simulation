@@ -8,11 +8,11 @@ type View = 'SETUP' | 'SIMULATION';
 
 // Loading overlay component
 const LoadingOverlay: React.FC = () => (
-  <div className="fixed inset-0 z-[9999] bg-background-light/80 backdrop-blur-sm flex items-center justify-center">
-    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-10 flex flex-col items-center gap-4">
-      <div className="w-10 h-10 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
-      <p className="text-sm font-bold text-slate-700">Running Simulation</p>
-      <p className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">10,000 Scenarios</p>
+  <div className="fixed inset-0 z-[9999] bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-sm flex items-center justify-center">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-10 flex flex-col items-center gap-4">
+      <div className="w-10 h-10 border-4 border-slate-200 dark:border-slate-700 border-t-primary rounded-full animate-spin" />
+      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Running Simulation</p>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-semibold">10,000 Scenarios</p>
     </div>
   </div>
 );
@@ -20,6 +20,21 @@ const LoadingOverlay: React.FC = () => (
 const App: React.FC = () => {
   const [view, setView] = useState<View>('SETUP');
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
+
+  // Apply theme class to document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
 
   // Default inputs
   const [inputs, setInputs] = useState<SimulationInputs>({
@@ -85,6 +100,8 @@ const App: React.FC = () => {
         <SetupView
           defaultInputs={inputs}
           onRun={handleRunSimulation}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />
       )}
 
@@ -97,6 +114,8 @@ const App: React.FC = () => {
           onEdit={() => setView('SETUP')}
           onRun={() => runSimulationAsync(inputs, selectedStrategy)}
           onCustomAllocationChange={handleCustomAllocationChange}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />
       )}
     </>
