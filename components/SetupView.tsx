@@ -85,7 +85,8 @@ interface SpendingPhasesEditorProps {
 const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, timeHorizon, onChange }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draftSpend, setDraftSpend] = useState<number>(0);
-  const [draftSplitAt, setDraftSplitAt] = useState<string>('');
+  const [draftStartYear, setDraftStartYear] = useState<string>('');
+  const [draftEndYear, setDraftEndYear] = useState<string>('');
 
   const handleAdd = () => {
     const last = phases[phases.length - 1];
@@ -116,25 +117,49 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
   const openEdit = (phase: SpendingPhase) => {
     setEditingId(phase.id);
     setDraftSpend(phase.annualSpend);
-    // Show the split point in 1-based year terms to match phase list labels
-    setDraftSplitAt(String(phase.startYear + 1));
+    setDraftStartYear(String(phase.startYear + 1));
+    setDraftEndYear(String(phase.endYear));
   };
 
   const handleEditSave = (id: number) => {
     const idx = phases.findIndex(p => p.id === id);
     let updated = phases.map(p => p.id === id ? { ...p, annualSpend: draftSpend } : p);
 
+    let currentStart = updated[idx].startYear;
+    let currentEnd = updated[idx].endYear;
+
+    let targetStart = idx > 0 && !isNaN(parseInt(draftStartYear)) ? parseInt(draftStartYear) - 1 : currentStart;
+    let targetEnd = idx < updated.length - 1 && !isNaN(parseInt(draftEndYear)) ? parseInt(draftEndYear) : currentEnd;
+
+    // Prevent phase inversion prior to bounding
+    if (targetStart >= targetEnd) {
+      targetStart = targetEnd - 1;
+    }
+
+    // Clamp to fixed outer bounds
     if (idx > 0) {
-      // User typed a 1-based year; convert to 0-based for internal storage
-      const newSplit1Based = parseInt(draftSplitAt);
-      if (!isNaN(newSplit1Based)) {
-        const newSplit = newSplit1Based - 1; // convert to 0-based
-        const prev = updated[idx - 1];
-        const curr = updated[idx];
-        const clamped = Math.max(prev.startYear + 1, Math.min(curr.endYear - 1, newSplit));
-        updated[idx - 1] = { ...prev, endYear: clamped };
-        updated[idx] = { ...curr, startYear: clamped };
-      }
+      const minStart = updated[idx - 1].startYear + 1;
+      targetStart = Math.max(minStart, targetStart);
+    }
+    
+    if (idx < updated.length - 1) {
+      const maxEnd = updated[idx + 1].endYear - 1;
+      targetEnd = Math.min(maxEnd, targetEnd);
+    }
+
+    // Secondary phase inversion check (in case outer bounds forced a collision)
+    if (targetStart >= targetEnd) {
+      targetStart = targetEnd - 1;
+    }
+
+    if (idx > 0) {
+      updated[idx - 1].endYear = targetStart;
+      updated[idx].startYear = targetStart;
+    }
+
+    if (idx < updated.length - 1) {
+      updated[idx].endYear = targetEnd;
+      updated[idx + 1].startYear = targetEnd;
     }
 
     onChange(updated);
@@ -201,25 +226,35 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
                       suffix="USD"
                     />
                   </div>
-                  {i > 0 && (
-                    <div className="w-32">
-                      <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
-                        Starts at Year
-                      </label>
-                      <input
-                        type="number"
-                        className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-                        value={draftSplitAt}
-                        // min/max in 1-based terms to match phase list labels
-                        min={phases[i - 1].startYear + 2}
-                        max={phase.endYear}
-                        onChange={(e) => setDraftSplitAt(e.target.value)}
-                      />
-                      <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1">
-                        {phases[i - 1].startYear + 2}–{phase.endYear}
-                      </p>
-                    </div>
-                  )}
+                  <div className="w-24">
+                    <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                      Start Year
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={draftStartYear}
+                      min={i > 0 ? phases[i - 1].startYear + 2 : 1}
+                      max={draftEndYear || phase.endYear}
+                      onChange={(e) => setDraftStartYear(e.target.value)}
+                      disabled={i === 0}
+                    />
+                  </div>
+                  
+                  <div className="w-24">
+                    <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                      End Year
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={draftEndYear}
+                      min={draftStartYear || (phase.startYear + 1)}
+                      max={i < phases.length - 1 ? phases[i + 1].endYear - 1 : timeHorizon}
+                      onChange={(e) => setDraftEndYear(e.target.value)}
+                      disabled={i === phases.length - 1}
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -325,10 +360,10 @@ const SetupView: React.FC<SetupViewProps> = ({
     const errors: string[] = [];
 
     // --- Individual field sanity checks (prevent engine poisoning) ---
-    if (!isFinite(formState.initialCash))        errors.push('Cash savings must be a finite number.');
+    if (!isFinite(formState.initialCash)) errors.push('Cash savings must be a finite number.');
     if (!isFinite(formState.initialInvestments)) errors.push('Investment portfolio must be a finite number.');
-    if (formState.initialCash < 0)               errors.push('Cash savings cannot be negative.');
-    if (formState.initialInvestments < 0)        errors.push('Investment portfolio cannot be negative.');
+    if (formState.initialCash < 0) errors.push('Cash savings cannot be negative.');
+    if (formState.initialInvestments < 0) errors.push('Investment portfolio cannot be negative.');
 
     const totalPortfolio = formState.initialCash + formState.initialInvestments;
     if (totalPortfolio <= 0) errors.push('Total portfolio must be greater than $0.');
@@ -489,7 +524,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               {/* ── CPA / Tax Section ─────────────────────────────────── */}
               <div className="pt-2">
                 <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors">
-                  Tax &amp; RMD (CPA Grade)
+                  Tax &amp; RMD
                 </h3>
 
                 {/* Retirement Age */}
