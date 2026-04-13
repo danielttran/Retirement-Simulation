@@ -178,9 +178,12 @@ const simulateYear = (
   const fees = stockFee + bondFee;
 
   // 3. Determine Withdrawal
-  // Cap at what can actually be realised after liquidation costs (Bug 1 fix).
+  // Cash can be spent directly at zero friction; only invested assets (stock/bond)
+  // incur a liquidation cost. Cap actualWithdrawal at the true maximum realizable
+  // amount so we never strand cash in the final year of a depleted portfolio.
   const totalAvailable = currStock + currBond + currCash;
-  const actualWithdrawal = Math.min(state.spend, totalAvailable * (1 - TRANSACTION_COST));
+  const maxPossibleWithdrawal = currCash + (currStock + currBond) * (1 - TRANSACTION_COST);
+  const actualWithdrawal = Math.min(state.spend, maxPossibleWithdrawal);
 
   let actionLog = "";
 
@@ -310,13 +313,26 @@ const generateAuditLog = (
     }
     state.bond = 0;
   } else {
-    // Bug 5 fix (mirror of runSimulation initial state).
-    const stocksToSell = Math.max(0, initialInvestments - totalStartPortfolio * targetStockWeight);
-    const setupCost = stocksToSell * TRANSACTION_COST;
+    // Initialization cost: charge friction on the full round-trip trade volume.
+    // Starting state: initialCash (cash) + initialInvestments (stocks, assumed).
+    // Target state:   targetStockWeight × total  (stocks)
+    //                 targetBondWeight  × total  (bonds, bought from zero)
+    //                 0                          (cash all deployed)
+    //
+    // Trade volume = |stock delta| + |bond delta|
+    //   = |initialInvestments − targetStockAmt| + targetBondAmt
+    //
+    // Previously only the sell side (max-zero stock delta) was charged, so users
+    // who started with all cash and needed to buy both stocks and bonds paid $0
+    // in friction. Now both buying and selling are priced correctly.
+    const targetStockAmt = totalStartPortfolio * targetStockWeight;
+    const targetBondAmt  = totalStartPortfolio * targetBondWeight;
+    const tradeVolume    = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
+    const setupCost      = tradeVolume * TRANSACTION_COST;
     const effectiveTotal = totalStartPortfolio - setupCost;
     state.stock = effectiveTotal * targetStockWeight;
-    state.bond = effectiveTotal * targetBondWeight;
-    state.cash = 0;
+    state.bond  = effectiveTotal * targetBondWeight;
+    state.cash  = 0;
   }
 
   for (let year = 1; year <= inputs.timeHorizon; year++) {
@@ -329,10 +345,12 @@ const generateAuditLog = (
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
 
-    // 2. Tax gross-up: to receive `baseSpend` after paying withdrawalTaxRate,
-    //    the portfolio must liquidate baseSpend / (1 - taxRate).
-    const taxRate = inputs.withdrawalTaxRate / 100;
-    const grossBaseSpend = taxRate > 0 ? baseSpend / (1 - taxRate) : baseSpend;
+    // 2. Tax gross-up: blend the nominal tax rate with the tax-deferred ratio so
+    //    only the proportional withdrawal from tax-deferred accounts is taxed.
+    //    effectiveTaxRate = withdrawalTaxRate × taxDeferredRatio (both as fractions).
+    //    Back-check: grossBaseSpend × (1 − effectiveTaxRate) = baseSpend ✓
+    const effectiveTaxRate = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
+    const grossBaseSpend = effectiveTaxRate > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
 
     // 3. The effective portfolio draw is the larger of the user's gross intent and the RMD.
     state.spend = Math.max(grossBaseSpend, rmdAmount);
@@ -430,14 +448,17 @@ export const runSimulation = (
       }
       state.bond = 0;
     } else {
-      // Bug 5 fix: assume initialInvestments are 100% stocks; selling the target-bond
-      // allocation to buy bonds at T=0 incurs TRANSACTION_COST on the sold portion.
-      const stocksToSell = Math.max(0, initialInvestments - totalStartPortfolio * targetStockWeight);
-      const setupCost = stocksToSell * TRANSACTION_COST;
+      // Initialization cost: symmetric round-trip friction on both buy and sell legs.
+      // Trade volume = |stock delta| + bond delta (bonds always bought from zero).
+      // Mirrors the identical fix in generateAuditLog — see that block for full derivation.
+      const targetStockAmt = totalStartPortfolio * targetStockWeight;
+      const targetBondAmt  = totalStartPortfolio * targetBondWeight;
+      const tradeVolume    = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
+      const setupCost      = tradeVolume * TRANSACTION_COST;
       const effectiveTotal = totalStartPortfolio - setupCost;
       state.stock = effectiveTotal * targetStockWeight;
-      state.bond = effectiveTotal * targetBondWeight;
-      state.cash = 0;
+      state.bond  = effectiveTotal * targetBondWeight;
+      state.cash  = 0;
     }
 
     const currentRunReturns: { stock: number; bond: number; cash: number }[] = [];
@@ -458,8 +479,10 @@ export const runSimulation = (
       const ageThisYear = inputs.currentAge + year + 1;
       const totalPreWithdrawal = state.stock + state.bond + state.cash;
       const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
-      const taxRate = inputs.withdrawalTaxRate / 100;
-      const grossBaseSpend = taxRate > 0 ? baseSpend / (1 - taxRate) : baseSpend;
+      // Blended effective tax rate: only the fraction held in tax-deferred accounts
+      // is taxable on withdrawal. See generateAuditLog for the identical derivation.
+      const effectiveTaxRate = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
+      const grossBaseSpend = effectiveTaxRate > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
       state.spend = Math.max(grossBaseSpend, rmdThisYear);
 
       const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
@@ -514,7 +537,12 @@ export const runSimulation = (
   const downturnCurve: number[] = [];
   const currentYear = new Date().getFullYear();
 
-  // Sort columns to find percentiles (Much faster than full run sorts for every year)
+  // Sort columns to find percentiles (much faster than full run sorts per year).
+  // NOTE: Float64Array.sort() mutates in-place. This is intentional and safe here
+  // because each run's trajectory is stored in a *separate* `currentRunTrajectory`
+  // Float64Array (inside `allRuns`). `trajectoryColumns[i]` is a parallel column-
+  // major copy used solely for O(N log N) percentile extraction; mutating it does
+  // not corrupt the row-major `allRuns[j].trajectory` arrays used by findBestFitRun.
   for (let i = 0; i < timeHorizon; i++) {
     const yearValues = trajectoryColumns[i].sort();
     downturnCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.10)]);
