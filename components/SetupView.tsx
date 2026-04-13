@@ -115,7 +115,8 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
   const openEdit = (phase: SpendingPhase) => {
     setEditingId(phase.id);
     setDraftSpend(phase.annualSpend);
-    setDraftSplitAt(String(phase.startYear));
+    // Show the split point in 1-based year terms to match phase list labels
+    setDraftSplitAt(String(phase.startYear + 1));
   };
 
   const handleEditSave = (id: number) => {
@@ -123,8 +124,10 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
     let updated = phases.map(p => p.id === id ? { ...p, annualSpend: draftSpend } : p);
 
     if (idx > 0) {
-      const newSplit = parseInt(draftSplitAt);
-      if (!isNaN(newSplit)) {
+      // User typed a 1-based year; convert to 0-based for internal storage
+      const newSplit1Based = parseInt(draftSplitAt);
+      if (!isNaN(newSplit1Based)) {
+        const newSplit = newSplit1Based - 1; // convert to 0-based
         const prev = updated[idx - 1];
         const curr = updated[idx];
         const clamped = Math.max(prev.startYear + 1, Math.min(curr.endYear - 1, newSplit));
@@ -198,7 +201,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
                     />
                   </div>
                   {i > 0 && (
-                    <div className="w-28">
+                    <div className="w-32">
                       <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
                         Starts at Year
                       </label>
@@ -206,10 +209,14 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
                         type="number"
                         className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
                         value={draftSplitAt}
-                        min={phases[i - 1].startYear + 1}
-                        max={phase.endYear - 1}
+                        // min/max in 1-based terms to match phase list labels
+                        min={phases[i - 1].startYear + 2}
+                        max={phase.endYear}
                         onChange={(e) => setDraftSplitAt(e.target.value)}
                       />
+                      <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1">
+                        {phases[i - 1].startYear + 2}–{phase.endYear}
+                      </p>
                     </div>
                   )}
                 </div>
