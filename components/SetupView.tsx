@@ -129,7 +129,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
     let currentEnd = updated[idx].endYear;
 
     let targetStart = idx > 0 && !isNaN(parseInt(draftStartYear)) ? parseInt(draftStartYear) - 1 : currentStart;
-    let targetEnd = idx < updated.length - 1 && !isNaN(parseInt(draftEndYear)) ? parseInt(draftEndYear) : currentEnd;
+    let targetEnd = !isNaN(parseInt(draftEndYear)) ? parseInt(draftEndYear) : currentEnd;
 
     // Prevent phase inversion prior to bounding
     if (targetStart >= targetEnd) {
@@ -145,6 +145,8 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
     if (idx < updated.length - 1) {
       const maxEnd = updated[idx + 1].endYear - 1;
       targetEnd = Math.min(maxEnd, targetEnd);
+    } else {
+      targetEnd = Math.min(timeHorizon, targetEnd);
     }
 
     // Secondary phase inversion check (in case outer bounds forced a collision)
@@ -157,8 +159,8 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
       updated[idx].startYear = targetStart;
     }
 
+    updated[idx].endYear = targetEnd;
     if (idx < updated.length - 1) {
-      updated[idx].endYear = targetEnd;
       updated[idx + 1].startYear = targetEnd;
     }
 
@@ -252,7 +254,6 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
                       min={draftStartYear || (phase.startYear + 1)}
                       max={i < phases.length - 1 ? phases[i + 1].endYear - 1 : timeHorizon}
                       onChange={(e) => setDraftEndYear(e.target.value)}
-                      disabled={i === phases.length - 1}
                     />
                   </div>
                 </div>
@@ -388,6 +389,7 @@ const SetupView: React.FC<SetupViewProps> = ({
     } else {
       if (phases.some(p => p.annualSpend <= 0)) errors.push('All spending phases must have an amount greater than $0.');
       if (phases.some(p => p.annualSpend >= totalPortfolio)) errors.push('Each phase\'s annual spending must be less than total portfolio.');
+      if (phases[phases.length - 1].endYear !== formState.timeHorizon) errors.push(`Spending phases must fully cover the Time Horizon (currently ${formState.timeHorizon} Years). Your phases end at Year ${phases[phases.length - 1].endYear}. Please edit or add a phase.`);
     }
     return errors;
   };

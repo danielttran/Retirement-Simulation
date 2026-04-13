@@ -39,11 +39,11 @@ const App: React.FC = () => {
   // Default inputs
   const [inputs, setInputs] = useState<SimulationInputs>({
     initialCash: 10000,
-    initialInvestments: 500000,
+    initialInvestments: 400000,
     spendingPhases: [{ id: 1, startYear: 0, endYear: 30, annualSpend: 30000 }],
-    timeHorizon: 30,
+    timeHorizon: 40,
     inflationRate: 3.0,
-    managementFee: 0.30,
+    managementFee: 0.10,
     customStockAllocation: 50,
     // CPA-grade defaults: typical pre-retiree profile
     currentAge: 65,
