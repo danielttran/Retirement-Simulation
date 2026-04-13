@@ -19,9 +19,10 @@ export type StrategyType = 'BUCKET' | 'CONSERVATIVE' | 'AGGRESSIVE' | 'CUSTOM';
 
 export interface YearResult {
   year: number;
-  average: number;
-  belowAverage: number;
-  downturn: number;
+  // null signals portfolio depletion; Recharts renders a gap when connectNulls={false}.
+  average: number | null;
+  belowAverage: number | null;
+  downturn: number | null;
 }
 
 export interface AuditRow {
