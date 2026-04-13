@@ -211,15 +211,20 @@ const simulateYear = (
         refillAmount = netCashReceived;
       }
 
-      // Spend Logic: Always try to spend from Cash first
+      // Spend Logic: Always try to spend from Cash first.
+      // Track whether a forced stock-sell actually occurred so the action log
+      // message is accurate even when cash is exactly drained by normal spending
+      // (currCash === actualWithdrawal → post-spend currCash === 0, but no sell).
+      let forcedSell = false;
       if (currCash >= actualWithdrawal) {
         currCash -= actualWithdrawal;
       } else {
-        // Cash Empty! Forced Stock Sell.
+        // Cash insufficient — forced stock sell to cover shortfall.
+        forcedSell = true;
         const shortfall = actualWithdrawal - currCash;
         currCash = 0;
 
-        // We need to generate 'shortfall' amount of cash. 
+        // We need to generate 'shortfall' net cash.
         // Gross sell needed = shortfall / (1 - cost)
         const grossSellNeeded = shortfall / (1 - TRANSACTION_COST);
 
@@ -229,7 +234,7 @@ const simulateYear = (
 
       if (returns.stock < 0) {
         actionLog = `Market Down ${(returns.stock * 100).toFixed(1)}%.`;
-        if (currCash > 0) actionLog += ` Spending from Cash Buffer.`;
+        if (!forcedSell) actionLog += ` Spending from Cash Buffer.`;
         else actionLog += ` Cash Empty! Forced Sell.`;
       } else {
         actionLog = `Market Up ${(returns.stock * 100).toFixed(1)}%.`;
@@ -600,7 +605,16 @@ export const runSimulation = (
   let dispBond = targetBondWeight;
   let dispCash = 0;
   if (strategy === 'BUCKET') {
-    const startCash = Math.min(totalStartPortfolio, 2 * getSpendingForYear(0, spendingPhases));
+    // The simulation targets `2 × state.spend` as its steady-state cash buffer,
+    // where `state.spend` is already grossed-up for taxes (see year-loop above).
+    // Apply the same effective-tax-rate formula here so the sidebar allocation
+    // percentage reflects what the engine actually maintains, not the raw spend.
+    const rawInitialSpend = getSpendingForYear(0, spendingPhases);
+    const effectiveTaxRateDisp = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
+    const grossedUpInitialSpend = effectiveTaxRateDisp > 0
+      ? rawInitialSpend / (1 - effectiveTaxRateDisp)
+      : rawInitialSpend;
+    const startCash = Math.min(totalStartPortfolio, 2 * grossedUpInitialSpend);
     dispCash = startCash / totalStartPortfolio;
     dispStock = 1.0 - dispCash;
     dispBond = 0;
