@@ -452,7 +452,10 @@ export const runSimulation = (
       const baseSpend = getSpendingForYear(year, spendingPhases);
 
       // --- RMD & Tax Gross-Up (mirrors generateAuditLog logic exactly) ---
-      const ageThisYear = inputs.currentAge + year;
+      // year is 0-based here; add 1 to align with the 1-based convention in
+      // generateAuditLog so both functions compute the same IRS age for the
+      // same retirement year (avoids a 1-year RMD trigger discrepancy).
+      const ageThisYear = inputs.currentAge + year + 1;
       const totalPreWithdrawal = state.stock + state.bond + state.cash;
       const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
       const taxRate = inputs.withdrawalTaxRate / 100;

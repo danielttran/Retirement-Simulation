@@ -59,6 +59,13 @@ const App: React.FC = () => {
   // main thread on every slider tick.
   const sliderDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Mirror of `inputs` in a ref so the debounced slider callback can read the
+  // latest state without capturing a stale closure and without using the
+  // `setInputs` functional updater as an impure reader (which React 18 Strict
+  // Mode would call twice, triggering double simulation runs).
+  const latestInputsRef = useRef<SimulationInputs>(inputs);
+  useEffect(() => { latestInputsRef.current = inputs; }, [inputs]);
+
   // Deferred simulation runner — yields to the main thread so loading UI renders
   const runSimulationAsync = useCallback((simInputs: SimulationInputs, strategy: StrategyType, onComplete?: () => void) => {
     setIsSimulating(true);
@@ -69,12 +76,15 @@ const App: React.FC = () => {
       try {
         const res = runSimulation(simInputs, strategy);
         setResults(res);
+        // Only navigate / notify the caller on success. If we called onComplete
+        // inside `finally`, a thrown error would still transition the user to the
+        // SIMULATION view with null/stale results while the error toast showed.
+        onComplete?.();
       } catch (err) {
         console.error('Simulation error:', err);
         setSimulationError(err instanceof Error ? err.message : 'Unexpected simulation error.');
       } finally {
         setIsSimulating(false);
-        onComplete?.();
       }
     }, 50);
   }, []);
@@ -95,11 +105,12 @@ const App: React.FC = () => {
     // queue up many blocking calls on the main thread.
     if (sliderDebounceRef.current) clearTimeout(sliderDebounceRef.current);
     sliderDebounceRef.current = setTimeout(() => {
-      // Read the latest inputs inside the timeout so we always use the current value.
-      setInputs(current => {
-        runSimulationAsync(current, 'CUSTOM');
-        return current;
-      });
+      // Use the ref (not a closure over `inputs`) to guarantee we read the
+      // most-recent state without triggering the Strict Mode double-invoke issue.
+      runSimulationAsync(
+        { ...latestInputsRef.current, customStockAllocation: newAlloc },
+        'CUSTOM'
+      );
     }, 150);
   }, [runSimulationAsync]);
 
