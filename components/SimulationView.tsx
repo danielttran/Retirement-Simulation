@@ -628,7 +628,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                             {row.action}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
-                            -${row.withdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            <div>-${row.withdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                            {row.rmdAmount > 0 && (
+                              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wide mt-0.5">
+                                RMD Enforced
+                              </div>
+                            )}
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                              ≈${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })} nominal
+                            </div>
                           </td>
                           <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200 transition-colors">
                             ${row.endTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}

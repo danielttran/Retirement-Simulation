@@ -13,6 +13,10 @@ export interface SimulationInputs {
   inflationRate: number;
   managementFee: number;
   customStockAllocation: number; // 0 to 100
+  // --- Tax & RMD (CPA-grade) ---
+  currentAge: number;        // User's age at retirement start — drives RMD schedule
+  taxDeferredRatio: number;  // 0–100: % of investable assets held in Traditional IRA / 401(k)
+  withdrawalTaxRate: number; // Effective marginal rate (0–50%) applied to all withdrawals
 }
 
 export type StrategyType = 'BUCKET' | 'CONSERVATIVE' | 'AGGRESSIVE' | 'CUSTOM';
@@ -33,11 +37,14 @@ export interface AuditRow {
   stockReturn: number;
   bondReturn: number;
   cashReturn: number; // New field for transparency
-  growthAmount: number; 
-  feesAmount: number;   
+  growthAmount: number;
+  feesAmount: number;
   action: string;
   withdrawal: number;
   endTotal: number;
+  // --- CPA-grade additions ---
+  rmdAmount: number;        // IRS-mandated minimum distribution for this year (0 if not applicable)
+  nominalWithdrawal: number; // withdrawal expressed in nominal (future) dollars for 1099-R reference
 }
 
 export interface SimulationResult {

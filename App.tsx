@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import SetupView from './components/SetupView';
 import SimulationView from './components/SimulationView';
 import { SimulationInputs, StrategyType, SimulationResult } from './types';
@@ -44,22 +44,34 @@ const App: React.FC = () => {
     timeHorizon: 30,
     inflationRate: 3.0,
     managementFee: 0.30,
-    customStockAllocation: 50
+    customStockAllocation: 50,
+    // CPA-grade defaults: typical pre-retiree profile
+    currentAge: 65,
+    taxDeferredRatio: 80,  // 80% in Traditional IRA/401(k) is common for US retirees
+    withdrawalTaxRate: 22, // 22% federal marginal bracket (2024 MFJ: $94k–$201k)
   });
 
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType>('BUCKET');
   const [results, setResults] = useState<SimulationResult | null>(null);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
+
+  // Debounce ref for the live custom-allocation slider so we don't block the
+  // main thread on every slider tick.
+  const sliderDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Deferred simulation runner — yields to the main thread so loading UI renders
   const runSimulationAsync = useCallback((simInputs: SimulationInputs, strategy: StrategyType, onComplete?: () => void) => {
     setIsSimulating(true);
-    // setTimeout(0) yields to the browser so the loading overlay paints
+    setSimulationError(null);
+    // setTimeout(50) yields to the browser so the loading overlay paints before
+    // the synchronous simulation loop blocks the thread.
     setTimeout(() => {
       try {
         const res = runSimulation(simInputs, strategy);
         setResults(res);
       } catch (err) {
         console.error('Simulation error:', err);
+        setSimulationError(err instanceof Error ? err.message : 'Unexpected simulation error.');
       } finally {
         setIsSimulating(false);
         onComplete?.();
@@ -75,15 +87,21 @@ const App: React.FC = () => {
     });
   };
 
-  const handleCustomAllocationChange = (newAlloc: number) => {
-    setInputs(prev => {
-      const updated = { ...prev, customStockAllocation: newAlloc };
-      // Re-run immediately for live slider feeling (no loading overlay for this)
-      const res = runSimulation(updated, 'CUSTOM');
-      setResults(res);
-      return updated;
-    });
-  };
+  const handleCustomAllocationChange = useCallback((newAlloc: number) => {
+    // Immediately update the displayed slider value (cheap — no simulation).
+    setInputs(prev => ({ ...prev, customStockAllocation: newAlloc }));
+
+    // Debounce the expensive 10,000-scenario re-run so rapid slider drags don't
+    // queue up many blocking calls on the main thread.
+    if (sliderDebounceRef.current) clearTimeout(sliderDebounceRef.current);
+    sliderDebounceRef.current = setTimeout(() => {
+      // Read the latest inputs inside the timeout so we always use the current value.
+      setInputs(current => {
+        runSimulationAsync(current, 'CUSTOM');
+        return current;
+      });
+    }, 150);
+  }, [runSimulationAsync]);
 
   // If strategy changes in simulation view, re-run
   useEffect(() => {
@@ -95,6 +113,26 @@ const App: React.FC = () => {
   return (
     <>
       {isSimulating && <LoadingOverlay />}
+
+      {/* Non-blocking error toast — appears when runSimulation throws without crashing the app */}
+      {simulationError && (
+        <div className="fixed bottom-4 right-4 z-[9999] bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-800 rounded-xl p-4 max-w-sm shadow-xl backdrop-blur-sm">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-red-500 text-xl mt-0.5">error</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-red-700 dark:text-red-400 mb-1">Simulation Error</p>
+              <p className="text-[11px] text-red-600 dark:text-red-400 leading-relaxed break-words">{simulationError}</p>
+            </div>
+            <button
+              onClick={() => setSimulationError(null)}
+              className="text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors shrink-0"
+              aria-label="Dismiss error"
+            >
+              <span className="material-symbols-outlined text-base">close</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {view === 'SETUP' && (
         <SetupView
