@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SimulationInputs } from '../types';
+import { SimulationInputs, SpendingPhase } from '../types';
 
 interface SetupViewProps {
   defaultInputs: SimulationInputs;
@@ -32,7 +32,6 @@ const CurrencyInput = ({
 
   const handleFocus = () => {
     setIsFocused(true);
-    // Show raw number for editing
     setDisplayStr(value.toString());
   };
 
@@ -45,7 +44,6 @@ const CurrencyInput = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Allow user to type anything (including multiple dots) temporarily
     setDisplayStr(e.target.value);
   };
 
@@ -65,17 +63,243 @@ const CurrencyInput = ({
   );
 };
 
+// ─── Spending Phases Editor ───────────────────────────────────────────────────
+
+const PHASE_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4'];
+const PHASE_BG = [
+  'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40',
+  'bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/40',
+  'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/40',
+  'bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40',
+  'bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/40',
+  'bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-100 dark:border-cyan-800/40',
+];
+
+interface SpendingPhasesEditorProps {
+  phases: SpendingPhase[];
+  timeHorizon: number;
+  onChange: (phases: SpendingPhase[]) => void;
+}
+
+const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, timeHorizon, onChange }) => {
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draftSpend, setDraftSpend] = useState<number>(0);
+  const [draftSplitAt, setDraftSplitAt] = useState<string>('');
+
+  const handleAdd = () => {
+    const last = phases[phases.length - 1];
+    const duration = last.endYear - last.startYear;
+    if (duration < 2) return;
+    const splitAt = last.startYear + Math.floor(duration / 2);
+    const newId = Math.max(...phases.map(p => p.id)) + 1;
+    onChange([
+      ...phases.slice(0, -1),
+      { ...last, endYear: splitAt },
+      { id: newId, startYear: splitAt, endYear: last.endYear, annualSpend: last.annualSpend },
+    ]);
+  };
+
+  const handleDelete = (id: number) => {
+    if (phases.length === 1) return;
+    const idx = phases.findIndex(p => p.id === id);
+    const updated = phases.filter(p => p.id !== id);
+    if (idx === 0) {
+      updated[0] = { ...updated[0], startYear: 0 };
+    } else {
+      updated[idx - 1] = { ...updated[idx - 1], endYear: phases[idx].endYear };
+    }
+    onChange(updated);
+    if (editingId === id) setEditingId(null);
+  };
+
+  const openEdit = (phase: SpendingPhase) => {
+    setEditingId(phase.id);
+    setDraftSpend(phase.annualSpend);
+    // Show the split point in 1-based year terms to match phase list labels
+    setDraftSplitAt(String(phase.startYear + 1));
+  };
+
+  const handleEditSave = (id: number) => {
+    const idx = phases.findIndex(p => p.id === id);
+    let updated = phases.map(p => p.id === id ? { ...p, annualSpend: draftSpend } : p);
+
+    if (idx > 0) {
+      // User typed a 1-based year; convert to 0-based for internal storage
+      const newSplit1Based = parseInt(draftSplitAt);
+      if (!isNaN(newSplit1Based)) {
+        const newSplit = newSplit1Based - 1; // convert to 0-based
+        const prev = updated[idx - 1];
+        const curr = updated[idx];
+        const clamped = Math.max(prev.startYear + 1, Math.min(curr.endYear - 1, newSplit));
+        updated[idx - 1] = { ...prev, endYear: clamped };
+        updated[idx] = { ...curr, startYear: clamped };
+      }
+    }
+
+    onChange(updated);
+    setEditingId(null);
+  };
+
+  const canAdd = phases[phases.length - 1].endYear - phases[phases.length - 1].startYear >= 2;
+
+  return (
+    <div>
+      {/* Timeline Bar */}
+      <div className="flex rounded-full overflow-hidden h-3 mb-1">
+        {phases.map((phase, i) => {
+          const widthPct = ((phase.endYear - phase.startYear) / timeHorizon) * 100;
+          return (
+            <div
+              key={phase.id}
+              style={{ width: `${widthPct}%`, backgroundColor: PHASE_COLORS[i % PHASE_COLORS.length] }}
+              className="h-full transition-all duration-300"
+              title={`Year ${phase.startYear + 1}–${phase.endYear}: $${phase.annualSpend.toLocaleString()}`}
+            />
+          );
+        })}
+      </div>
+
+      {/* Year Markers */}
+      <div className="relative h-5 mb-3 text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none">
+        <span className="absolute left-0">0</span>
+        {phases.slice(1).map((phase) => {
+          const leftPct = (phase.startYear / timeHorizon) * 100;
+          return (
+            <span
+              key={phase.id}
+              className="absolute -translate-x-1/2"
+              style={{ left: `${leftPct}%` }}
+            >
+              {phase.startYear}
+            </span>
+          );
+        })}
+        <span className="absolute right-0">{timeHorizon}</span>
+      </div>
+
+      {/* Phase List */}
+      <div className="space-y-2">
+        {phases.map((phase, i) => (
+          <div
+            key={phase.id}
+            className={`rounded-lg ${PHASE_BG[i % PHASE_BG.length]}`}
+            style={{ borderLeftWidth: '3px', borderLeftColor: PHASE_COLORS[i % PHASE_COLORS.length] }}
+          >
+            {editingId === phase.id ? (
+              /* Inline Edit Form */
+              <div className="px-3 py-3 flex flex-col gap-3">
+                <div className="flex gap-3 items-start">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                      Annual Spend
+                    </label>
+                    <CurrencyInput
+                      value={draftSpend}
+                      onChange={setDraftSpend}
+                      prefix="$"
+                      suffix="USD"
+                    />
+                  </div>
+                  {i > 0 && (
+                    <div className="w-32">
+                      <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                        Starts at Year
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-3 text-sm font-medium text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                        value={draftSplitAt}
+                        // min/max in 1-based terms to match phase list labels
+                        min={phases[i - 1].startYear + 2}
+                        max={phase.endYear}
+                        onChange={(e) => setDraftSplitAt(e.target.value)}
+                      />
+                      <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1">
+                        {phases[i - 1].startYear + 2}–{phase.endYear}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEditSave(phase.id)}
+                    className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="px-4 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Display Row */
+              <div className="px-3 py-2.5 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">
+                  Year {phase.startYear + 1}–{phase.endYear}:{' '}
+                  <span className="text-slate-900 dark:text-slate-100">${phase.annualSpend.toLocaleString()}</span>
+                  <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500 ml-1">USD/yr</span>
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEdit(phase)}
+                    className="w-7 h-7 flex items-center justify-center rounded-md bg-white/70 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 transition-colors text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
+                    aria-label="Edit phase"
+                  >
+                    <span className="material-symbols-outlined text-sm" style={{ fontSize: '15px' }}>edit</span>
+                  </button>
+                  <button
+                    onClick={() => handleDelete(phase.id)}
+                    disabled={phases.length === 1}
+                    className="w-7 h-7 flex items-center justify-center rounded-md bg-white/70 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-slate-400 dark:text-slate-500 hover:text-red-500 border border-transparent hover:border-red-200 dark:hover:border-red-800/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                    aria-label="Delete phase"
+                  >
+                    <span className="material-symbols-outlined text-sm" style={{ fontSize: '15px' }}>close</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add Button */}
+      <button
+        onClick={handleAdd}
+        disabled={!canAdd}
+        className="mt-2 w-full border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <span className="material-symbols-outlined text-base" style={{ fontSize: '16px' }}>add</span>
+        Add Spending Period
+      </button>
+    </div>
+  );
+};
+
+// ─── Sync helper: keep phases contiguous with the current time horizon ────────
+function syncPhasesToHorizon(phases: SpendingPhase[], horizon: number): SpendingPhase[] {
+  let updated = phases.filter(p => p.startYear < horizon);
+  if (updated.length === 0) {
+    updated = [{ ...phases[0], startYear: 0, endYear: horizon }];
+  } else {
+    updated[updated.length - 1] = { ...updated[updated.length - 1], endYear: horizon };
+  }
+  return updated;
+}
+
+// ─── Main SetupView ───────────────────────────────────────────────────────────
+
 const SetupView: React.FC<SetupViewProps> = ({
   defaultInputs,
   onRun,
   isDarkMode,
   onToggleDarkMode
 }) => {
-  // Local state for the form
   const [formState, setFormState] = useState<SimulationInputs>(defaultInputs);
 
-  // Sync local state ONLY if values truly differ (deep check)
-  // This prevents the "resetting while typing" issue if parent re-renders
   useEffect(() => {
     if (JSON.stringify(defaultInputs) !== JSON.stringify(formState)) {
       setFormState(defaultInputs);
@@ -87,16 +311,30 @@ const SetupView: React.FC<SetupViewProps> = ({
     setFormState(prev => ({ ...prev, [field]: val }));
   };
 
+  const handleTimeHorizonChange = (newHorizon: number) => {
+    setFormState(prev => ({
+      ...prev,
+      timeHorizon: newHorizon,
+      spendingPhases: syncPhasesToHorizon(prev.spendingPhases, newHorizon),
+    }));
+  };
+
   // Input validation
   const getValidationErrors = (): string[] => {
     const errors: string[] = [];
     const totalPortfolio = formState.initialCash + formState.initialInvestments;
     if (totalPortfolio <= 0) errors.push('Total portfolio must be greater than $0.');
-    if (formState.annualSpend <= 0) errors.push('Annual spending must be greater than $0.');
-    if (formState.annualSpend >= totalPortfolio) errors.push('Annual spending must be less than total portfolio.');
     if (formState.timeHorizon < 5 || formState.timeHorizon > 50) errors.push('Time horizon must be 5–50 years.');
     if (formState.inflationRate < 0 || formState.inflationRate > 15) errors.push('Inflation rate must be 0–15%.');
     if (formState.managementFee < 0 || formState.managementFee > 5) errors.push('Management fee must be 0–5%.');
+
+    const phases = formState.spendingPhases;
+    if (phases.length === 0) {
+      errors.push('At least one spending phase is required.');
+    } else {
+      if (phases.some(p => p.annualSpend <= 0)) errors.push('All spending phases must have an amount greater than $0.');
+      if (phases.some(p => p.annualSpend >= totalPortfolio)) errors.push('Each phase\'s annual spending must be less than total portfolio.');
+    }
     return errors;
   };
 
@@ -178,16 +416,23 @@ const SetupView: React.FC<SetupViewProps> = ({
             {/* Right Column - Variables */}
             <div className="space-y-8">
               <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 transition-colors">Variables</h3>
+
+              {/* Spending Phases */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Annual Retirement Spending</label>
-                <CurrencyInput
-                  value={formState.annualSpend}
-                  onChange={(v) => updateField('annualSpend', v)}
-                  prefix="$"
-                  suffix="USD"
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
+                  Spending Phases
+                  <span className="ml-2 text-[10px] normal-case font-normal text-slate-400 dark:text-slate-600">
+                    (click edit to change amount or split point)
+                  </span>
+                </label>
+                <SpendingPhasesEditor
+                  phases={formState.spendingPhases}
+                  timeHorizon={formState.timeHorizon}
+                  onChange={(phases) => setFormState(prev => ({ ...prev, spendingPhases: phases }))}
                 />
               </div>
 
+              {/* Time Horizon */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Simulation Time Horizon</label>
                 <div className="flex items-center gap-4">
@@ -196,12 +441,13 @@ const SetupView: React.FC<SetupViewProps> = ({
                     max="50" min="5"
                     type="range"
                     value={formState.timeHorizon}
-                    onChange={(e) => updateField('timeHorizon', parseInt(e.target.value))}
+                    onChange={(e) => handleTimeHorizonChange(parseInt(e.target.value))}
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.timeHorizon} Years</span>
                 </div>
               </div>
 
+              {/* Inflation & Management Fee */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Inflation Rate</label>

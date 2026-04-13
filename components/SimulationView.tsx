@@ -272,8 +272,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({
             </div>
             <div className="w-px h-8 bg-slate-200 dark:bg-slate-800"></div>
             <div className="flex flex-col">
-              <span className="text-[11px] uppercase font-semibold text-slate-400 dark:text-slate-500 tracking-wider">Annual Spend (Today's $)</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">${inputs.annualSpend.toLocaleString()}</span>
+              <span className="text-[11px] uppercase font-semibold text-slate-400 dark:text-slate-500 tracking-wider">Initial Annual Spend</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                ${inputs.spendingPhases[0].annualSpend.toLocaleString()}
+                {inputs.spendingPhases.length > 1 && (
+                  <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 ml-1">
+                    +{inputs.spendingPhases.length - 1} tier{inputs.spendingPhases.length > 2 ? 's' : ''}
+                  </span>
+                )}
+              </span>
             </div>
             <div className="w-px h-8 bg-slate-200 dark:bg-slate-800"></div>
             <div className="flex flex-col">
@@ -677,7 +684,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Starting Safe Withdrawal</span>
-                <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{((inputs.annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
+                <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{((inputs.spendingPhases[0].annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
                 <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Initial Rate</span>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Recommended safe rate is typically 3.5% - 4.0%.</p>
               </div>

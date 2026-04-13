@@ -1,4 +1,15 @@
-import { SimulationInputs, SimulationResult, StrategyType, YearResult, AuditRow } from '../types';
+import { SimulationInputs, SimulationResult, StrategyType, YearResult, AuditRow, SpendingPhase } from '../types';
+
+/**
+ * Returns the annual spend amount for a given simulation year (0-based).
+ * Phases are contiguous and cover [0, timeHorizon) — the last matching phase wins.
+ */
+export function getSpendingForYear(year: number, phases: SpendingPhase[]): number {
+  for (let i = phases.length - 1; i >= 0; i--) {
+    if (year >= phases[i].startYear) return phases[i].annualSpend;
+  }
+  return phases[0].annualSpend;
+}
 
 // 1. CONFIGURATION & CONSTANTS
 
@@ -232,7 +243,7 @@ const generateAuditLog = (
   annualReturns: { stock: number, bond: number, cash: number }[]
 ): AuditRow[] => {
   const log: AuditRow[] = [];
-  const { initialCash, initialInvestments, annualSpend, customStockAllocation } = inputs;
+  const { initialCash, initialInvestments, spendingPhases, customStockAllocation } = inputs;
   const totalStartPortfolio = initialCash + initialInvestments;
 
   let targetStockWeight = 0;
@@ -241,12 +252,13 @@ const generateAuditLog = (
   else if (strategy === 'AGGRESSIVE') { targetBondWeight = 0.30; targetStockWeight = 0.70; }
   else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
 
+  const initialSpend = getSpendingForYear(0, spendingPhases);
   let state: SimState = {
-    stock: 0, bond: 0, cash: 0, spend: annualSpend
+    stock: 0, bond: 0, cash: 0, spend: initialSpend
   };
 
   if (strategy === 'BUCKET') {
-    const targetCashBuffer = 2 * annualSpend;
+    const targetCashBuffer = 2 * initialSpend;
     state.cash = Math.min(totalStartPortfolio, targetCashBuffer);
     state.stock = totalStartPortfolio - state.cash;
     state.bond = 0;
@@ -257,6 +269,8 @@ const generateAuditLog = (
   }
 
   for (let year = 1; year <= inputs.timeHorizon; year++) {
+    // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
+    state.spend = getSpendingForYear(year - 1, spendingPhases);
     const startCash = state.cash;
     const startStock = state.stock;
     const startBond = state.bond;
@@ -291,7 +305,7 @@ export const runSimulation = (
   inputs: SimulationInputs,
   strategy: StrategyType
 ): SimulationResult => {
-  const { initialCash, initialInvestments, annualSpend, timeHorizon, customStockAllocation, inflationRate } = inputs;
+  const { initialCash, initialInvestments, spendingPhases, timeHorizon, customStockAllocation, inflationRate } = inputs;
   const totalStartPortfolio = initialCash + initialInvestments;
 
   let targetStockWeight = 0;
@@ -317,14 +331,16 @@ export const runSimulation = (
   let failures = 0;
   let totalAnnualizedVol = 0;
 
+  const initialSpend = getSpendingForYear(0, spendingPhases);
+
   for (let sim = 0; sim < NUM_SIMULATIONS; sim++) {
     // Initial State
     let state: SimState = {
-      stock: 0, bond: 0, cash: 0, spend: annualSpend
+      stock: 0, bond: 0, cash: 0, spend: initialSpend
     };
 
     if (strategy === 'BUCKET') {
-      const targetCashBuffer = 2 * annualSpend;
+      const targetCashBuffer = 2 * initialSpend;
       state.cash = Math.min(totalStartPortfolio, targetCashBuffer);
       state.stock = totalStartPortfolio - state.cash;
       state.bond = 0;
@@ -342,6 +358,8 @@ export const runSimulation = (
     let prevBalance = totalStartPortfolio;
 
     for (let year = 0; year < timeHorizon; year++) {
+      // Update spend for the current phase before simulateYear consumes state.spend
+      state.spend = getSpendingForYear(year, spendingPhases);
       const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
       // Cash (HYSA/money market) cannot have negative nominal returns.
       // In real terms, the floor is 0% nominal → real = -inflation/(1+inflation)
@@ -452,7 +470,7 @@ export const runSimulation = (
   let dispBond = targetBondWeight;
   let dispCash = 0;
   if (strategy === 'BUCKET') {
-    const startCash = Math.min(totalStartPortfolio, 2 * annualSpend);
+    const startCash = Math.min(totalStartPortfolio, 2 * getSpendingForYear(0, spendingPhases));
     dispCash = startCash / totalStartPortfolio;
     dispStock = 1.0 - dispCash;
     dispBond = 0;

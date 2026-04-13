@@ -1,7 +1,14 @@
+export interface SpendingPhase {
+  id: number;          // stable React key; increment on creation
+  startYear: number;   // 0-based, inclusive — phase covers [startYear, endYear)
+  endYear: number;     // 0-based, exclusive
+  annualSpend: number; // nominal dollars (today's $)
+}
+
 export interface SimulationInputs {
   initialCash: number;
   initialInvestments: number;
-  annualSpend: number;
+  spendingPhases: SpendingPhase[]; // replaces annualSpend; covers [0, timeHorizon) contiguously
   timeHorizon: number;
   inflationRate: number;
   managementFee: number;
