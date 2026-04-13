@@ -151,9 +151,9 @@ const SimulationView: React.FC<SimulationViewProps> = ({
     const headers = ['Year', 'Average Market', 'Below Average', 'Significant Downturn'];
     const rows = results.data.map(d => [
       d.year,
-      d.average ? d.average.toFixed(2) : '0.00',
-      d.belowAverage ? d.belowAverage.toFixed(2) : '0.00',
-      d.downturn ? d.downturn.toFixed(2) : '0.00'
+      d.average != null ? d.average.toFixed(2) : '0.00',
+      d.belowAverage != null ? d.belowAverage.toFixed(2) : '0.00',
+      d.downturn != null ? d.downturn.toFixed(2) : '0.00'
     ]);
 
 

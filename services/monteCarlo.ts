@@ -144,8 +144,9 @@ const simulateYear = (
   const fees = stockFee + bondFee;
 
   // 3. Determine Withdrawal
+  // Cap at what can actually be realised after liquidation costs (Bug 1 fix).
   const totalAvailable = currStock + currBond + currCash;
-  const actualWithdrawal = Math.min(state.spend, totalAvailable);
+  const actualWithdrawal = Math.min(state.spend, totalAvailable * (1 - TRANSACTION_COST));
 
   let actionLog = "";
 
@@ -162,9 +163,11 @@ const simulateYear = (
       // Rule: If Stocks are UP, sell gains to refill cash bucket
       if (returns.stock > 0 && currStock > 0 && currCash < targetBuffer) {
         const needed = targetBuffer - currCash;
-        // Sell stock to fill bucket. Apply transaction cost to the sale.
-        const grossSell = Math.min(needed, currStock);
-        const netCashReceived = grossSell * (1 - TRANSACTION_COST); // Drag applied
+        // Gross-up: sell enough stock so that net proceeds after cost equal exactly `needed`
+        // (Bug 3 fix — selling exactly `needed` only delivers needed*(1-cost) < needed).
+        const grossSellNeeded = needed / (1 - TRANSACTION_COST);
+        const grossSell = Math.min(grossSellNeeded, currStock);
+        const netCashReceived = grossSell * (1 - TRANSACTION_COST);
 
         currStock -= grossSell;
         currCash += netCashReceived;
@@ -208,8 +211,9 @@ const simulateYear = (
         const targetStock = total * targetWeights.stock;
         const targetBond = total * targetWeights.bond;
         const tradeAmount = Math.abs(currStock - targetStock) + Math.abs(currBond - targetBond);
-        // Only half of trade amount is actual sells (the other half is buys from proceeds)
-        const rebalancingCost = (tradeAmount / 2) * TRANSACTION_COST;
+        // Apply cost to the total gross traded volume; the /2 approximation only holds for
+        // pure rebalances with no net outflow, not when funding a withdrawal (Bug 2 fix).
+        const rebalancingCost = tradeAmount * TRANSACTION_COST;
         total -= rebalancingCost;
 
         currStock = total * targetWeights.stock;
@@ -258,13 +262,26 @@ const generateAuditLog = (
   };
 
   if (strategy === 'BUCKET') {
+    // Bug 5 fix (mirror of runSimulation initial state).
     const targetCashBuffer = 2 * initialSpend;
-    state.cash = Math.min(totalStartPortfolio, targetCashBuffer);
-    state.stock = totalStartPortfolio - state.cash;
+    if (initialCash >= targetCashBuffer) {
+      state.cash = targetCashBuffer;
+      state.stock = totalStartPortfolio - targetCashBuffer;
+    } else {
+      const cashNeeded = targetCashBuffer - initialCash;
+      const grossSellNeeded = cashNeeded / (1 - TRANSACTION_COST);
+      const grossSell = Math.min(grossSellNeeded, initialInvestments);
+      state.cash = initialCash + grossSell * (1 - TRANSACTION_COST);
+      state.stock = initialInvestments - grossSell;
+    }
     state.bond = 0;
   } else {
-    state.stock = totalStartPortfolio * targetStockWeight;
-    state.bond = totalStartPortfolio * targetBondWeight;
+    // Bug 5 fix (mirror of runSimulation initial state).
+    const stocksToSell = Math.max(0, initialInvestments - totalStartPortfolio * targetStockWeight);
+    const setupCost = stocksToSell * TRANSACTION_COST;
+    const effectiveTotal = totalStartPortfolio - setupCost;
+    state.stock = effectiveTotal * targetStockWeight;
+    state.bond = effectiveTotal * targetBondWeight;
     state.cash = 0;
   }
 
@@ -314,14 +331,16 @@ export const runSimulation = (
   else if (strategy === 'AGGRESSIVE') { targetBondWeight = 0.30; targetStockWeight = 0.70; }
   else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
 
-  const inflate = (val: number) => (1 + val) / (1 + inflationRate / 100) - 1;
+  const inflationDivisor = 1 + inflationRate / 100;
+  const inflate = (val: number) => (1 + val) / inflationDivisor - 1;
 
-  // Volatility (stdDev) of real returns ≈ volatility of nominal returns.
-  // Inflation volatility is very small compared to asset volatility, so no deflation needed.
+  // Variance properties require scaling stdDev by the same divisor as the mean.
+  // Real return = Nominal return / inflationDivisor  →  σ_real = σ_nominal / inflationDivisor
+  // (Bug 4 fix — previously the nominal stdDev was passed through unadjusted.)
   const REAL_ASSUMPTIONS = {
-    STOCK: { mean: inflate(NOMINAL_ASSUMPTIONS.STOCK.mean), stdDev: NOMINAL_ASSUMPTIONS.STOCK.stdDev },
-    BOND: { mean: inflate(NOMINAL_ASSUMPTIONS.BOND.mean), stdDev: NOMINAL_ASSUMPTIONS.BOND.stdDev },
-    CASH: { mean: inflate(NOMINAL_ASSUMPTIONS.CASH.mean), stdDev: NOMINAL_ASSUMPTIONS.CASH.stdDev },
+    STOCK: { mean: inflate(NOMINAL_ASSUMPTIONS.STOCK.mean), stdDev: NOMINAL_ASSUMPTIONS.STOCK.stdDev / inflationDivisor },
+    BOND:  { mean: inflate(NOMINAL_ASSUMPTIONS.BOND.mean),  stdDev: NOMINAL_ASSUMPTIONS.BOND.stdDev  / inflationDivisor },
+    CASH:  { mean: inflate(NOMINAL_ASSUMPTIONS.CASH.mean),  stdDev: NOMINAL_ASSUMPTIONS.CASH.stdDev  / inflationDivisor },
   };
 
   const allRuns: SimulationRun[] = [];
@@ -340,13 +359,29 @@ export const runSimulation = (
     };
 
     if (strategy === 'BUCKET') {
+      // Bug 5 fix: converting investments → cash to fund the cash bucket incurs selling cost.
       const targetCashBuffer = 2 * initialSpend;
-      state.cash = Math.min(totalStartPortfolio, targetCashBuffer);
-      state.stock = totalStartPortfolio - state.cash;
+      if (initialCash >= targetCashBuffer) {
+        // Already have enough cash; invest the surplus into stocks (buying — no cost).
+        state.cash = targetCashBuffer;
+        state.stock = totalStartPortfolio - targetCashBuffer;
+      } else {
+        // Sell investments to top up the cash bucket; gross-up so net cash == cashNeeded.
+        const cashNeeded = targetCashBuffer - initialCash;
+        const grossSellNeeded = cashNeeded / (1 - TRANSACTION_COST);
+        const grossSell = Math.min(grossSellNeeded, initialInvestments);
+        state.cash = initialCash + grossSell * (1 - TRANSACTION_COST);
+        state.stock = initialInvestments - grossSell;
+      }
       state.bond = 0;
     } else {
-      state.stock = totalStartPortfolio * targetStockWeight;
-      state.bond = totalStartPortfolio * targetBondWeight;
+      // Bug 5 fix: assume initialInvestments are 100% stocks; selling the target-bond
+      // allocation to buy bonds at T=0 incurs TRANSACTION_COST on the sold portion.
+      const stocksToSell = Math.max(0, initialInvestments - totalStartPortfolio * targetStockWeight);
+      const setupCost = stocksToSell * TRANSACTION_COST;
+      const effectiveTotal = totalStartPortfolio - setupCost;
+      state.stock = effectiveTotal * targetStockWeight;
+      state.bond = effectiveTotal * targetBondWeight;
       state.cash = 0;
     }
 
