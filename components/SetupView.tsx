@@ -38,7 +38,8 @@ const CurrencyInput = ({
   const handleBlur = () => {
     setIsFocused(false);
     const parsed = parseFloat(displayStr.replace(/,/g, ''));
-    const final = isNaN(parsed) ? 0 : parsed;
+    // Guard against NaN and Infinity — both would poison the Monte Carlo engine.
+    const final = isNaN(parsed) || !isFinite(parsed) ? 0 : parsed;
     onChange(final);
     setDisplayStr(final.toLocaleString(undefined, { maximumFractionDigits: 2 }));
   };
@@ -322,11 +323,29 @@ const SetupView: React.FC<SetupViewProps> = ({
   // Input validation
   const getValidationErrors = (): string[] => {
     const errors: string[] = [];
+
+    // --- Individual field sanity checks (prevent engine poisoning) ---
+    if (!isFinite(formState.initialCash))        errors.push('Cash savings must be a finite number.');
+    if (!isFinite(formState.initialInvestments)) errors.push('Investment portfolio must be a finite number.');
+    if (formState.initialCash < 0)               errors.push('Cash savings cannot be negative.');
+    if (formState.initialInvestments < 0)        errors.push('Investment portfolio cannot be negative.');
+
     const totalPortfolio = formState.initialCash + formState.initialInvestments;
     if (totalPortfolio <= 0) errors.push('Total portfolio must be greater than $0.');
     if (formState.timeHorizon < 5 || formState.timeHorizon > 50) errors.push('Time horizon must be 5–50 years.');
-    if (formState.inflationRate < 0 || formState.inflationRate > 15) errors.push('Inflation rate must be 0–15%.');
-    if (formState.managementFee < 0 || formState.managementFee > 5) errors.push('Management fee must be 0–5%.');
+
+    if (!isFinite(formState.inflationRate) || formState.inflationRate < 0 || formState.inflationRate > 15)
+      errors.push('Inflation rate must be 0–15%.');
+    if (!isFinite(formState.managementFee) || formState.managementFee < 0 || formState.managementFee > 5)
+      errors.push('Management fee must be 0–5%.');
+
+    // --- CPA / Tax field validation ---
+    if (formState.currentAge < 25 || formState.currentAge > 85)
+      errors.push('Retirement age must be between 25 and 85.');
+    if (formState.taxDeferredRatio < 0 || formState.taxDeferredRatio > 100)
+      errors.push('Tax-deferred ratio must be 0–100%.');
+    if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 50)
+      errors.push('Withdrawal tax rate must be 0–50%.');
 
     const phases = formState.spendingPhases;
     if (phases.length === 0) {
@@ -464,6 +483,62 @@ const SetupView: React.FC<SetupViewProps> = ({
                     onChange={(v) => updateField('managementFee', v)}
                     suffix="%"
                   />
+                </div>
+              </div>
+
+              {/* ── CPA / Tax Section ─────────────────────────────────── */}
+              <div className="pt-2">
+                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors">
+                  Tax &amp; RMD (CPA Grade)
+                </h3>
+
+                {/* Retirement Age */}
+                <div className="mb-6">
+                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                    Retirement Starting Age
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
+                      min="25" max="85" type="range"
+                      value={formState.currentAge}
+                      onChange={(e) => updateField('currentAge', parseInt(e.target.value))}
+                    />
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.currentAge} yrs</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                    RMDs are enforced automatically from age 73 (IRS Pub. 590-B).
+                  </p>
+                </div>
+
+                {/* Tax-Deferred Ratio & Withdrawal Tax Rate */}
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                      Tax-Deferred %
+                    </label>
+                    <CurrencyInput
+                      value={formState.taxDeferredRatio}
+                      onChange={(v) => updateField('taxDeferredRatio', Math.min(100, Math.max(0, v)))}
+                      suffix="%"
+                    />
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                      Portion in Traditional IRA / 401(k) vs. Roth / Taxable.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                      Withdrawal Tax Rate
+                    </label>
+                    <CurrencyInput
+                      value={formState.withdrawalTaxRate}
+                      onChange={(v) => updateField('withdrawalTaxRate', Math.min(50, Math.max(0, v)))}
+                      suffix="%"
+                    />
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                      Effective marginal rate applied to each withdrawal (e.g., 22%).
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

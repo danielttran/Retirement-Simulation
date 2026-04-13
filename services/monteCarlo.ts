@@ -15,6 +15,40 @@ export function getSpendingForYear(year: number, phases: SpendingPhase[]): numbe
 
 const TRANSACTION_COST = 0.0005; // 0.05% friction on selling/rebalancing
 
+// ---------------------------------------------------------------------------
+// RMD — IRS Uniform Lifetime Table (Publication 590-B, SECURE 2.0 / 2022+)
+// RMD threshold is age 73 (born 1951–1959) or 75 (born 1960+).
+// For simplicity we apply age 73 as the universal trigger; the UI can surface
+// the 73 vs. 75 distinction when a full birth-year field is added.
+// ---------------------------------------------------------------------------
+const RMD_AGE_THRESHOLD = 73;
+const RMD_FACTORS: Readonly<Record<number, number>> = {
+  73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9,
+  78: 22.0, 79: 21.1, 80: 20.2, 81: 19.4, 82: 18.5,
+  83: 17.7, 84: 16.8, 85: 16.0, 86: 15.2, 87: 14.4,
+  88: 13.7, 89: 12.9, 90: 12.2, 91: 11.5, 92: 10.8,
+  93: 10.1, 94:  9.5, 95:  8.9, 96:  8.4, 97:  7.8,
+  98:  7.3, 99:  6.8, 100: 6.4,
+};
+
+/**
+ * Computes the IRS-required minimum distribution in real (today's) dollars.
+ *
+ * The simulation runs entirely in real terms, so the portfolio balance passed
+ * in is already inflation-adjusted. Since real_balance = nominal / (1+π)^t
+ * and RMD = nominal_balance / factor, the real RMD = real_balance / factor.
+ *
+ * @param realBalance  Total portfolio value in today's dollars.
+ * @param age          Client's age in the simulation year being computed.
+ * @param taxDeferredRatio  Fraction (0–100) of the portfolio in tax-deferred accounts.
+ * @returns Real-dollar RMD (≥ 0).
+ */
+function computeRMD(realBalance: number, age: number, taxDeferredRatio: number): number {
+  if (age < RMD_AGE_THRESHOLD || taxDeferredRatio <= 0) return 0;
+  const factor = RMD_FACTORS[Math.min(age, 100)] ?? 6.4; // cap factor at age-100 value
+  return (realBalance * (taxDeferredRatio / 100)) / factor;
+}
+
 // Nominal Return Assumptions (Long-term historical averages)
 const NOMINAL_ASSUMPTIONS = {
   STOCK: { mean: 0.085, stdDev: 0.17 }, // ~8.5% Nominal, 17% Vol
@@ -287,7 +321,22 @@ const generateAuditLog = (
 
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
-    state.spend = getSpendingForYear(year - 1, spendingPhases);
+    const baseSpend = getSpendingForYear(year - 1, spendingPhases);
+
+    // --- RMD & Tax Gross-Up ---
+    // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
+    const ageThisYear = inputs.currentAge + year;
+    const totalPreWithdrawal = state.stock + state.bond + state.cash;
+    const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
+
+    // 2. Tax gross-up: to receive `baseSpend` after paying withdrawalTaxRate,
+    //    the portfolio must liquidate baseSpend / (1 - taxRate).
+    const taxRate = inputs.withdrawalTaxRate / 100;
+    const grossBaseSpend = taxRate > 0 ? baseSpend / (1 - taxRate) : baseSpend;
+
+    // 3. The effective portfolio draw is the larger of the user's gross intent and the RMD.
+    state.spend = Math.max(grossBaseSpend, rmdAmount);
+
     const startCash = state.cash;
     const startStock = state.stock;
     const startBond = state.bond;
@@ -295,6 +344,10 @@ const generateAuditLog = (
     const returns = annualReturns[year - 1];
 
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
+
+    // Nominal withdrawal = real withdrawal × cumulative inflation factor for CPA / 1099-R reference
+    const inflationFactor = Math.pow(1 + inputs.inflationRate / 100, year);
+    const nominalWithdrawal = outcome.withdrawal * inflationFactor;
 
     log.push({
       year: new Date().getFullYear() + year,
@@ -308,7 +361,9 @@ const generateAuditLog = (
       feesAmount: outcome.fees,
       action: outcome.actionLog,
       withdrawal: outcome.withdrawal,
-      endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash
+      endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
+      rmdAmount,
+      nominalWithdrawal,
     });
 
     state = outcome.nextState;
@@ -394,7 +449,19 @@ export const runSimulation = (
 
     for (let year = 0; year < timeHorizon; year++) {
       // Update spend for the current phase before simulateYear consumes state.spend
-      state.spend = getSpendingForYear(year, spendingPhases);
+      const baseSpend = getSpendingForYear(year, spendingPhases);
+
+      // --- RMD & Tax Gross-Up (mirrors generateAuditLog logic exactly) ---
+      // year is 0-based here; add 1 to align with the 1-based convention in
+      // generateAuditLog so both functions compute the same IRS age for the
+      // same retirement year (avoids a 1-year RMD trigger discrepancy).
+      const ageThisYear = inputs.currentAge + year + 1;
+      const totalPreWithdrawal = state.stock + state.bond + state.cash;
+      const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
+      const taxRate = inputs.withdrawalTaxRate / 100;
+      const grossBaseSpend = taxRate > 0 ? baseSpend / (1 - taxRate) : baseSpend;
+      state.spend = Math.max(grossBaseSpend, rmdThisYear);
+
       const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
       // Cash (HYSA/money market) cannot have negative nominal returns.
       // In real terms, the floor is 0% nominal → real = -inflation/(1+inflation)
