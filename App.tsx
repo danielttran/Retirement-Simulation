@@ -40,7 +40,7 @@ const App: React.FC = () => {
   const [inputs, setInputs] = useState<SimulationInputs>({
     initialCash: 10000,
     initialInvestments: 500000,
-    annualSpend: 30000,
+    spendingPhases: [{ id: 1, startYear: 0, endYear: 30, annualSpend: 30000 }],
     timeHorizon: 30,
     inflationRate: 3.0,
     managementFee: 0.30,
