@@ -90,14 +90,23 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
 
   const handleAdd = () => {
     const last = phases[phases.length - 1];
-    const duration = last.endYear - last.startYear;
-    if (duration < 2) return;
-    const splitAt = last.startYear + Math.floor(duration / 2);
+    let newStart;
+    let modifiedLast = { ...last };
+
+    if (last.endYear < timeHorizon) {
+      newStart = last.endYear;
+    } else {
+      const duration = last.endYear - last.startYear;
+      if (duration < 2) return;
+      newStart = last.startYear + Math.floor(duration / 2);
+      modifiedLast.endYear = newStart;
+    }
+
     const newId = Math.max(...phases.map(p => p.id)) + 1;
     onChange([
       ...phases.slice(0, -1),
-      { ...last, endYear: splitAt },
-      { id: newId, startYear: splitAt, endYear: last.endYear, annualSpend: last.annualSpend },
+      modifiedLast,
+      { id: newId, startYear: newStart, endYear: timeHorizon, annualSpend: last.annualSpend },
     ]);
   };
 
@@ -141,7 +150,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
       const minStart = updated[idx - 1].startYear + 1;
       targetStart = Math.max(minStart, targetStart);
     }
-    
+
     if (idx < updated.length - 1) {
       const maxEnd = updated[idx + 1].endYear - 1;
       targetEnd = Math.min(maxEnd, targetEnd);
@@ -168,7 +177,8 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
     setEditingId(null);
   };
 
-  const canAdd = phases[phases.length - 1].endYear - phases[phases.length - 1].startYear >= 2;
+  const lastPhase = phases[phases.length - 1];
+  const canAdd = lastPhase.endYear < timeHorizon || lastPhase.endYear - lastPhase.startYear >= 2;
 
   return (
     <div>
@@ -242,7 +252,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
                       disabled={i === 0}
                     />
                   </div>
-                  
+
                   <div className="w-24">
                     <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
                       End Year
@@ -446,6 +456,18 @@ const SetupView: React.FC<SetupViewProps> = ({
             {/* Left Column - Assets */}
             <div className="space-y-8">
               <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 transition-colors">Assets</h3>
+              
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Birth Year</label>
+                <input
+                  type="number"
+                  min="1900" max="2100"
+                  className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-medium"
+                  value={formState.birthYear}
+                  onChange={(e) => updateField('birthYear', parseInt(e.target.value) || 0)}
+                />
+              </div>
+
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Total Cash Savings</label>
                 <CurrencyInput
@@ -467,6 +489,28 @@ const SetupView: React.FC<SetupViewProps> = ({
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Total value of Stocks, Bonds, ETFs, and Mutual Funds.</p>
               </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Social Security / Pension</label>
+                <CurrencyInput
+                  value={formState.socialSecurityIncome}
+                  onChange={(v) => updateField('socialSecurityIncome', v)}
+                  prefix="$"
+                  suffix="/mo"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Estimated fixed income to automatically offset withdrawals.</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Age to Claim</label>
+                <input
+                  type="number"
+                  min="50" max="80"
+                  className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-medium"
+                  value={formState.socialSecurityAge}
+                  onChange={(e) => updateField('socialSecurityAge', parseInt(e.target.value) || 0)}
+                />
+              </div>
             </div>
 
             {/* Right Column - Variables */}
@@ -478,7 +522,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
                   Spending Phases
                   <span className="ml-2 text-[10px] normal-case font-normal text-slate-400 dark:text-slate-600">
-                    (click edit to change amount or split point)
+                    (click edit to change amount or duration)
                   </span>
                 </label>
                 <SpendingPhasesEditor
@@ -504,79 +548,74 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
 
               {/* Inflation & Management Fee */}
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Inflation Rate</label>
-                  <CurrencyInput
-                    value={formState.inflationRate}
-                    onChange={(v) => updateField('inflationRate', v)}
-                    suffix="%"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Management Fee</label>
-                  <CurrencyInput
-                    value={formState.managementFee}
-                    onChange={(v) => updateField('managementFee', v)}
-                    suffix="%"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Inflation Rate</label>
+                <CurrencyInput
+                  value={formState.inflationRate}
+                  onChange={(v) => updateField('inflationRate', v)}
+                  suffix="%"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Management Fee</label>
+                <CurrencyInput
+                  value={formState.managementFee}
+                  onChange={(v) => updateField('managementFee', v)}
+                  suffix="%"
+                />
               </div>
 
               {/* ── CPA / Tax Section ─────────────────────────────────── */}
-              <div className="pt-2">
-                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors">
-                  Tax &amp; RMD
-                </h3>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors mt-8">
+                Tax &amp; RMD
+              </h3>
 
-                {/* Retirement Age */}
-                <div className="mb-6">
-                  <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                    Retirement Starting Age
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <input
-                      className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
-                      min="25" max="85" type="range"
-                      value={formState.currentAge}
-                      onChange={(e) => updateField('currentAge', parseInt(e.target.value))}
-                    />
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.currentAge} yrs</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                    RMDs are enforced automatically from age 73 (IRS Pub. 590-B).
-                  </p>
+              {/* Retirement Age */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                  Retirement Starting Age
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
+                    min="25" max="85" type="range"
+                    value={formState.currentAge}
+                    onChange={(e) => updateField('currentAge', parseInt(e.target.value))}
+                  />
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.currentAge} yrs</span>
                 </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                  RMDs are enforced automatically from age 73 (IRS Pub. 590-B).
+                </p>
+              </div>
 
-                {/* Tax-Deferred Ratio & Withdrawal Tax Rate */}
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                      Tax-Deferred %
-                    </label>
-                    <CurrencyInput
-                      value={formState.taxDeferredRatio}
-                      onChange={(v) => updateField('taxDeferredRatio', Math.min(100, Math.max(0, v)))}
-                      suffix="%"
-                    />
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                      Portion in Traditional IRA / 401(k) vs. Roth / Taxable.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                      Withdrawal Tax Rate
-                    </label>
-                    <CurrencyInput
-                      value={formState.withdrawalTaxRate}
-                      onChange={(v) => updateField('withdrawalTaxRate', Math.min(50, Math.max(0, v)))}
-                      suffix="%"
-                    />
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                      Effective marginal rate applied to each withdrawal (e.g., 22%).
-                    </p>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                  Tax-Deferred %
+                </label>
+                <CurrencyInput
+                  value={formState.taxDeferredRatio}
+                  onChange={(v) => updateField('taxDeferredRatio', Math.min(100, Math.max(0, v)))}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                  Portion subject to RMD triggers.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                  Withdrawal Tax Rate
+                </label>
+                <CurrencyInput
+                  value={formState.withdrawalTaxRate}
+                  onChange={(v) => updateField('withdrawalTaxRate', Math.min(50, Math.max(0, v)))}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                  Marginal rate on withdrawals.
+                </p>
               </div>
             </div>
           </div>

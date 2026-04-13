@@ -17,6 +17,11 @@ export interface SimulationInputs {
   currentAge: number;        // User's age at retirement start — drives RMD schedule
   taxDeferredRatio: number;  // 0–100: % of investable assets held in Traditional IRA / 401(k)
   withdrawalTaxRate: number; // Effective marginal rate (0–50%) applied to all withdrawals
+  
+  // --- Supplemental Income (Social Security / Pension) ---
+  birthYear: number;
+  socialSecurityIncome: number; // Monthly estimate (e.g. 1200)
+  socialSecurityAge: number;    // Age to start claiming
 }
 
 export type StrategyType = 'BUCKET' | 'CONSERVATIVE' | 'AGGRESSIVE' | 'CUSTOM';

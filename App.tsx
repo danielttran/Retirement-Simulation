@@ -49,6 +49,9 @@ const App: React.FC = () => {
     currentAge: 65,
     taxDeferredRatio: 80,  // 80% in Traditional IRA/401(k) is common for US retirees
     withdrawalTaxRate: 22, // 22% federal marginal bracket (2024 MFJ: $94k–$201k)
+    birthYear: 1980,
+    socialSecurityIncome: 1200,
+    socialSecurityAge: 67,
   });
 
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType>('BUCKET');

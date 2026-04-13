@@ -350,11 +350,17 @@ const generateAuditLog = (
 
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
-    const baseSpend = getSpendingForYear(year - 1, spendingPhases);
+    let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
 
     // --- RMD & Tax Gross-Up ---
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
     const ageThisYear = inputs.currentAge + year;
+    
+    // Supplemental Income offsets need for portfolio withdrawals
+    if (ageThisYear >= inputs.socialSecurityAge) {
+      baseSpend -= inputs.socialSecurityIncome * 12;
+    }
+
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
 
@@ -363,10 +369,11 @@ const generateAuditLog = (
     //    effectiveTaxRate = withdrawalTaxRate × taxDeferredRatio (both as fractions).
     //    Back-check: grossBaseSpend × (1 − effectiveTaxRate) = baseSpend ✓
     const effectiveTaxRate = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
-    const grossBaseSpend = effectiveTaxRate > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
+    const grossBaseSpend = effectiveTaxRate > 0 && baseSpend > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
 
     // 3. The effective portfolio draw is the larger of the user's gross intent and the RMD.
-    state.spend = Math.max(grossBaseSpend, rmdAmount);
+    // If we have excess income (baseSpend < 0), let it reinvest into the portfolio natively.
+    state.spend = baseSpend < 0 ? baseSpend : Math.max(grossBaseSpend, rmdAmount);
 
     const startCash = state.cash;
     const startStock = state.stock;
@@ -483,20 +490,26 @@ export const runSimulation = (
 
     for (let year = 0; year < timeHorizon; year++) {
       // Update spend for the current phase before simulateYear consumes state.spend
-      const baseSpend = getSpendingForYear(year, spendingPhases);
+      let baseSpend = getSpendingForYear(year, spendingPhases);
 
       // --- RMD & Tax Gross-Up (mirrors generateAuditLog logic exactly) ---
       // year is 0-based here; add 1 to align with the 1-based convention in
       // generateAuditLog so both functions compute the same IRS age for the
       // same retirement year (avoids a 1-year RMD trigger discrepancy).
       const ageThisYear = inputs.currentAge + year + 1;
+      
+      // Supplemental Income offsets need for portfolio withdrawals
+      if (ageThisYear >= inputs.socialSecurityAge) {
+        baseSpend -= inputs.socialSecurityIncome * 12;
+      }
+
       const totalPreWithdrawal = state.stock + state.bond + state.cash;
       const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
       // Blended effective tax rate: only the fraction held in tax-deferred accounts
       // is taxable on withdrawal. See generateAuditLog for the identical derivation.
       const effectiveTaxRate = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
-      const grossBaseSpend = effectiveTaxRate > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
-      state.spend = Math.max(grossBaseSpend, rmdThisYear);
+      const grossBaseSpend = effectiveTaxRate > 0 && baseSpend > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
+      state.spend = baseSpend < 0 ? baseSpend : Math.max(grossBaseSpend, rmdThisYear);
 
       const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
       // Cash (HYSA/money market) cannot have negative nominal returns.
