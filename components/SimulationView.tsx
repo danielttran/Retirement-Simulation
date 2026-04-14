@@ -105,7 +105,7 @@ ${inputs.spendingPhases.map(p => `Year ${p.startYear} to ${p.endYear}: $${p.annu
 Selected Strategy: ${selectedStrategy}
 Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(results.allocation.bond * 100).toFixed(1)}% Bond / ${(results.allocation.cash * 100).toFixed(1)}% Cash
 
---- SIMULATION RESULTS (10,000 Monte Carlo Runs) ---
+--- SIMULATION RESULTS (100,000 Monte Carlo Runs) ---
 Success Rate: ${results.successRate.toFixed(1)}% (Portfolio > $0 at end of term)
 Expected Final Median Value (Real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
 Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
@@ -477,7 +477,7 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">Portfolio Projection</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">10,000 market scenarios simulated <span className="text-slate-300 dark:text-slate-700 mx-2">•</span> Last Run: {runTime}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">100,000 market scenarios simulated <span className="text-slate-300 dark:text-slate-700 mx-2">•</span> Last Run: {runTime}</p>
                 </div>
 
                 <div className="flex flex-col md:items-end gap-4">

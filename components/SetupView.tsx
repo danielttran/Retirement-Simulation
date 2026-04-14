@@ -654,7 +654,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               <span className="relative z-10">Run Simulation</span>
               {isValid && <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>}
             </button>
-            <p className="mt-6 text-[11px] font-semibold text-slate-300 dark:text-slate-600 uppercase tracking-wider transition-colors">10,000 Monte Carlo Simulations Per Strategy</p>
+            <p className="mt-6 text-[11px] font-semibold text-slate-300 dark:text-slate-600 uppercase tracking-wider transition-colors">100,000 Monte Carlo Simulations Per Strategy</p>
           </div>
 
           <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex gap-1">
