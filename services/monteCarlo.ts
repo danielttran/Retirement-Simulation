@@ -37,7 +37,7 @@ function computeRMD(realBalance: number, age: number, taxDeferredRatio: number, 
   if (taxDeferredRatio <= 0) return 0;
   
   let threshold = 73; // Default SECURE 2.0
-  if (birthYear <= 1950) threshold = 72;
+  if (birthYear < 1950) threshold = 72;  // born before 1950 → age 72 (pre-SECURE 2.0)
   else if (birthYear >= 1960) threshold = 75;
 
   if (age < threshold) return 0;
