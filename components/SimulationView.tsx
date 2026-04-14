@@ -181,19 +181,19 @@ ${auditSample}
       return (
         <>
           <p className="mb-4">
-            A traditional <strong>Fixed Allocation</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
+            A traditional <strong>Target Mix</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
           </p>
-          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Drift-Band Rebalancing):</p>
+          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Automatic Rebalancing):</p>
           <ul className="list-disc pl-4 space-y-2 mb-4">
             <li>
-              <strong>If drift ≤ 5 %:</strong> Withdrawal is funded proportionally at the current mix — no corrective trades, minimal friction cost.
+              <strong>If the mix wanders within 5%:</strong> We withdraw money normally from your existing balance without making extra trades, saving you fees.
             </li>
             <li>
-              <strong>If drift &gt; 5 %:</strong> A full rebalance is executed back to target, automatically buying cheap assets and trimming the overweight ones.
+              <strong>If the mix drifts off by more than 5%:</strong> A full rebalance is triggered. We automatically sell the assets that did well and buy what did poorly, getting your risk precisely back to your target.
             </li>
           </ul>
           <p>
-            The 5 % band eliminates unnecessary round-trip costs in calm markets while preserving the buy-low / sell-high discipline when allocations drift materially.
+            This 5% "buffer" eliminates unnecessary fees in calm markets while forcing you to "buy low and sell high" when things shift dramatically.
           </p>
         </>
       )
@@ -738,37 +738,37 @@ ${auditSample}
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">bolt</span>Crash Event
                       </span>
-                      <span>Jump diffusion fired (Merton model): ~2% annual chance of an extra 20–40% equity drawdown on top of normal log-normal variance.</span>
+                      <span>Market Crash Event: About a 2% chance each year of a sudden 20–40% drop in stocks on top of normal market ups and downs.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">shield</span>Capital Preservation
                       </span>
-                      <span>Guyton-Klinger: current withdrawal rate exceeded 120% of the initial rate → spending automatically cut by 10% this year and permanently.</span>
+                      <span>Safety Rule: You started withdrawing an unsafe shrinking percentage of your total money. Spending was successfully cut by 10% to protect you from running out.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">trending_up</span>Prosperity Rule
                       </span>
-                      <span>Guyton-Klinger: current withdrawal rate dropped below 80% of the initial rate → spending raised by 10% this year and permanently.</span>
+                      <span>Bonus Rule: Your investments grew faster than expected, making your withdrawals a very safe small percentage. Spending was safely raised by 10%!</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">verified</span>RMD: $X (met)
                       </span>
-                      <span>IRS Required Minimum Distribution (SECURE 2.0 / Pub 590-B). Withdrawal was floored at this amount; displayed in real today's dollars.</span>
+                      <span>Required Minimum Distribution (RMD): IRS rules require you to take at least this much out of your pre-tax retirement accounts.</span>
                     </div>
                     <div className="flex items-start gap-2">
-                      <span className="font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0">GK Multiplier ×X.XXX</span>
-                      <span>Accumulated compounding of all past G-K guardrail adjustments. Multiplier &lt; 1.0 = spending has been cut overall; &gt; 1.0 = raised overall.</span>
+                      <span className="font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0">GK Multiplier &times;X.XXX</span>
+                      <span>Spending Changes Over Time: Shows how much your original spending has been cut or raised long-term by the Safety/Bonus rules.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-purple-500 dark:text-purple-400 whitespace-nowrap shrink-0">Infl: X.X% (purple)</span>
-                      <span>Realised stochastic inflation this year (randomly drawn, mean = your target rate, σ = 1.5%). Differs from your input each year by design.</span>
+                      <span>Actual Inflation: The exact inflation for this specific year (which randomly jumps around your expected average).</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Nominal (1099-R): ~$X</span>
-                      <span>The same withdrawal converted to future (nominal) dollars using cumulative stochastic inflation — matches what would appear on an IRS Form 1099-R.</span>
+                      <span>Future Dollars (Form 1099-R): The dollar amount that will actually appear on your tax form years from now, adjusted for inflation.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Total Draw = Spend + Tax</span>
@@ -792,13 +792,13 @@ ${auditSample}
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Start Balance</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
                           Real Returns
-                          <div className="text-[9px] text-purple-500 dark:text-purple-400 normal-case font-normal tracking-normal mt-0.5">incl. realised inflation</div>
+                          <div className="text-[9px] text-purple-500 dark:text-purple-400 normal-case font-normal tracking-normal mt-0.5">incl. actual inflation check</div>
                         </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Growth</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
                           Guardrail &amp; Strategy Action
-                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Guyton-Klinger + mechanical action</div>
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Rules safely keeping plan afloat</div>
                         </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
                           Withdrawal (today's $)
@@ -1033,18 +1033,18 @@ ${auditSample}
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-3 text-xs">
                   {([
-                    { label: 'Inflation Volatility', value: '1.5% std dev', note: 'Annual σ around user\'s mean rate' },
-                    { label: 'Equity–Inflation Correlation', value: '−0.30', note: 'Fisher-effect: crash years → lower inflation' },
-                    { label: 'Market Crash Probability', value: '2% / year', note: 'Merton (1976) jump-diffusion; ~55% chance over 40 yrs' },
-                    { label: 'Crash Severity', value: '20–40% drawdown', note: 'Uniform draw; multiplicative on equity return' },
-                    { label: 'G-K Upper Guardrail', value: '>120% IWR → −10% spend', note: 'Capital Preservation Rule (Guyton-Klinger 2006)' },
-                    { label: 'G-K Lower Guardrail', value: '<80% IWR → +10% spend', note: 'Prosperity Rule (Guyton-Klinger 2006)' },
-                    { label: 'Drift-Band Width', value: '±5% equity ratio', note: 'Full rebalance only outside band; reduces friction' },
-                    { label: 'Transaction Cost', value: '0.05% per trade', note: 'Applied to all liquidation / rebalancing events' },
-                    { label: 'RMD Table', value: 'IRS Uniform Lifetime', note: 'Pub 590-B, SECURE 2.0; thresholds: 72 / 73 / 75' },
-                    { label: 'Simulations Run', value: '100,000', note: 'Monte Carlo; column-major Float64Array storage' },
-                    { label: 'All Values', value: 'Real (Today\'s $)', note: 'Inflation-adjusted throughout; nominal shown for 1099-R' },
-                    { label: 'Stock Model', value: 'Log-normal + Jump', note: 'µ=8.5%, σ=17% nominal; Merton crash overlay' },
+                    { label: 'Inflation Volatility', value: '1.5% std dev', note: `Annual fluctuation jumping up or down around your expected average of ${inputs.inflationRate}%` },
+                    { label: 'Market Relationships', value: '−0.30 Correlation', note: 'If stocks crash, inflation often drops slightly at the same time' },
+                    { label: 'Market Crash Probability', value: '2% / year', note: 'A black-swan event; about a 55% chance of occurring over a 40-year lifetime' },
+                    { label: 'Crash Severity', value: '20–40% drop', note: 'Suddenly slashes the value of stocks for that specific year on top of normal market swings' },
+                    { label: 'Safety Guardrail', value: 'Overspending → −10%', note: 'Cuts spending by 10% if your balance drops dangerously low compared to your initial rate' },
+                    { label: 'Bonus Guardrail', value: 'Excess growth → +10%', note: 'Raises spending by 10% if the market booms and your withdrawal rate becomes extremely small' },
+                    { label: 'Rebalancing Limit', value: '±5% of target mix', note: 'We only force a costly trade if your mix wanders too far off target' },
+                    { label: 'Fees & Costs', value: `${inputs.managementFee}% Mgt + 0.05% Trade`, note: `Your ${inputs.managementFee}% yearly management fee plus 0.05% friction cost applied whenever selling or buying` },
+                    { label: 'Required Distribution (RMD)', value: 'IRS Uniform Lifetime', note: 'Follows SECURE 2.0 withdrawal rules (starts at age 72, 73, or 75 depending on birth year)' },
+                    { label: 'Simulations Run', value: '100,000', note: 'Mathematically stress tests every possible future path based on your exact start numbers' },
+                    { label: 'Value Display', value: 'Real (Today\'s $)', note: 'Everything is shown in today\'s purchasing power so you understand true buying power' },
+                    { label: 'Stock Math', value: 'Log-normal Engine', note: `Calculates random ranges that match your expected ${inputs.expectedStockReturn}% return with historical exactness` },
                   ] as { label: string; value: string; note: string }[]).map(({ label, value, note }) => (
                     <div key={label} className="flex flex-col gap-0.5">
                       <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{label}</span>

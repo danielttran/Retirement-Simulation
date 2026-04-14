@@ -577,13 +577,13 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Expected Stock Return</label>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Expected Yearly Stock Return</label>
                 <CurrencyInput
                   value={formState.expectedStockReturn}
                   onChange={(v) => updateField('expectedStockReturn', v)}
                   suffix="%"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Nominal historical average (default 8.5%).</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Average yearly growth of stocks before adjusting for inflation.</p>
               </div>
 
               <div>
@@ -621,7 +621,7 @@ const SetupView: React.FC<SetupViewProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                  Tax-Deferred %
+                  Pre-Tax Savings %
                 </label>
                 <CurrencyInput
                   value={formState.taxDeferredRatio}
@@ -629,13 +629,13 @@ const SetupView: React.FC<SetupViewProps> = ({
                   suffix="%"
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  Portion subject to RMD triggers.
+                  Percentage in Traditional 401(k)/IRA subject to Required Minimum Distributions (RMDs).
                 </p>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                  Withdrawal Tax Rate
+                  Estimated Tax Rate
                 </label>
                 <CurrencyInput
                   value={formState.withdrawalTaxRate}
@@ -643,7 +643,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   suffix="%"
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  Marginal rate on withdrawals.
+                  Your expected tax rate on withdrawals from pre-tax accounts.
                 </p>
               </div>
             </div>
@@ -660,7 +660,7 @@ const SetupView: React.FC<SetupViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-[11px] font-semibold text-growth-green dark:text-green-400 uppercase tracking-wider mb-2 transition-colors">
-                  Average Market (P)
+                  Average Market (Percentile)
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -671,11 +671,11 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileAverage}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Green line — baseline target scenario.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Green line: The exact middle outcome (50% did better, 50% did worse).</p>
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-below-avg-gold dark:text-amber-400 uppercase tracking-wider mb-2 transition-colors">
-                  Below Average (P)
+                  Below Average (Percentile)
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -686,11 +686,11 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileBelowAverage}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Gold line — conservative planning scenario.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Gold line: A sluggish market (e.g., bottom 25% of outcomes).</p>
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-downturn-red dark:text-red-400 uppercase tracking-wider mb-2 transition-colors">
-                  Downturn (P)
+                  Downturn (Percentile)
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -701,7 +701,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileDownturn}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Red line — stress test (lower = more extreme).</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Red line: A severe stress test (e.g., worst 10% of outcomes).</p>
               </div>
             </div>
           </div>
@@ -749,7 +749,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
               <h4 className="text-xs font-bold text-slate-900 dark:text-slate-200 mb-2 transition-colors">What is Monte Carlo?</h4>
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed transition-colors">
-                Instead of assuming a steady return (e.g., 7% every year), a Monte Carlo simulation uses random sampling to generate thousands of possible market scenarios based on historical volatility. This helps identify the probability of running out of money in "worst-case" scenarios.
+                Instead of assuming a steady return (e.g., 7% every year), a Monte Carlo mathematically tests your plan against thousands of possible historical market rollercoasters. This helps identify the true probability of running out of money, giving both you and your CPA a realistic stress-tested view.
               </p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-300">
@@ -758,7 +758,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
               <h4 className="text-xs font-bold text-slate-900 dark:text-slate-200 mb-2 transition-colors">Why Strategy Matters?</h4>
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed transition-colors">
-                The allocation between Stocks (growth) and Bonds (stability) determines your portfolio's resilience. The <strong>Bucket Strategy</strong> is unique: it keeps 2 years of cash on hand to avoid selling stocks during market crashes, potentially increasing longevity.
+                Your mix of Stocks (growth) and Bonds/Cash (stability) determines how your savings weather bad times. The <strong>Bucket Strategy</strong> is unique: it keeps 2 years of living expenses in cash to avoid selling stocks during market crashes, giving your investments time to recover.
               </p>
             </div>
           </div>

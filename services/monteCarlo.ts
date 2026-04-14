@@ -361,16 +361,16 @@ const simulateYear = (
 
       if (returns.stock < 0) {
         if (!forcedSell) {
-          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: spending from Cash Bucket, stocks preserved (recovery mode).`;
+          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: Spending from cash to give stocks time to recover.`;
         } else {
-          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: Cash Bucket depleted — forced stock sale to cover shortfall.`;
+          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: Cash drained — forced to sell stocks to cover spending.`;
         }
       } else {
         actionLog = `Market up ${(returns.stock * 100).toFixed(1)}%.`;
         if (refillAmount > 0) {
-          actionLog += ` Sold stock gains → refilled Cash Bucket +$${Math.round(refillAmount / 1000)}k (2-yr buffer maintained).`;
+          actionLog += ` Sold stock gains to refill cash by $${Math.round(refillAmount / 1000)}k (2-yr buffer safe).`;
         } else {
-          actionLog += ` Cash Bucket full; no refill needed.`;
+          actionLog += ` Cash buffer already full; no selling needed.`;
         }
       }
 
@@ -410,7 +410,7 @@ const simulateYear = (
           currStock = total * targetWeights.stock;
           currBond  = total * targetWeights.bond;
           currCash  = 0;
-          actionLog = `Drift ${(drift * 100).toFixed(1)}% exceeded 5% band → Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
+          actionLog = `Mix drifted too far (${(drift * 100).toFixed(1)}%). Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
         } else {
           // WITHIN band (≤ 5 %): sell proportionally at the current allocation.
           // Only charge friction on the liquidation required to cover spending.
@@ -420,7 +420,7 @@ const simulateYear = (
           currStock = total * currentEquityRatio;
           currBond  = total * (1 - currentEquityRatio);
           currCash  = 0;
-          actionLog = `Drift ${(drift * 100).toFixed(1)}% within ±5% band → Proportional withdrawal at ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)}, no rebalance.`;
+          actionLog = `Mix stayed within 5% limit. Normal withdrawal at ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)}, without extra rebalancing trades.`;
         }
       } else {
         currStock = 0; currBond = 0; currCash = 0;
@@ -571,11 +571,11 @@ const generateAuditLog = (
       if (currentWR > state.iwr * 1.20) {
         state.spendMultiplier *= 0.90;
         state.spend           *= 0.90;
-        gkEvent = 'Capital Preservation Rule: CWR exceeded 120% of baseline → spending cut 10%.';
+        gkEvent = 'Safety Rule Triggered: You are withdrawing an unsafe amount. Spending cut by 10%.';
       } else if (currentWR < state.iwr * 0.80) {
         state.spendMultiplier *= 1.10;
         state.spend           *= 1.10;
-        gkEvent = 'Prosperity Rule: CWR fell below 80% of baseline → spending raised 10%.';
+        gkEvent = 'Bonus Rule Triggered: Your portfolio grew exceptionally well. Spending raised by 10%.';
       }
     }
 
