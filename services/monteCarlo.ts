@@ -364,16 +364,24 @@ const generateAuditLog = (
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
 
-    // 2. Tax gross-up: blend the nominal tax rate with the tax-deferred ratio so
-    //    only the proportional withdrawal from tax-deferred accounts is taxed.
-    //    effectiveTaxRate = withdrawalTaxRate × taxDeferredRatio (both as fractions).
-    //    Back-check: grossBaseSpend × (1 − effectiveTaxRate) = baseSpend ✓
-    const effectiveTaxRate = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
-    const grossBaseSpend = effectiveTaxRate > 0 && baseSpend > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
+    // 2. Tax logic fix: The portfolio effectively only "loses" what the user consumes (baseSpend)
+    // plus what the IRS consumes (taxOwed). Unspent RMD proceeds remain invested natively.
+    const taxRate = inputs.withdrawalTaxRate / 100;
+    const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
-    // 3. The effective portfolio draw is the larger of the user's gross intent and the RMD.
-    // If we have excess income (baseSpend < 0), let it reinvest into the portfolio natively.
-    state.spend = baseSpend < 0 ? baseSpend : Math.max(grossBaseSpend, rmdAmount);
+    let taxOwed = 0;
+    if (baseSpend > 0) {
+      const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
+      const taxFromNeeds = grossBaseSpend - baseSpend;
+      // Tax on RMD is calculated on the full amount since the entire RMD comes from tax-deferred sources.
+      const taxFromRMD = rmdAmount * taxRate;
+      taxOwed = Math.max(taxFromNeeds, taxFromRMD);
+    } else {
+      // User is fully funded by SS/Pension, but RMD still triggers a taxable event
+      taxOwed = rmdAmount * taxRate;
+    }
+
+    state.spend = baseSpend + taxOwed;
 
     const startCash = state.cash;
     const startStock = state.stock;
@@ -399,6 +407,7 @@ const generateAuditLog = (
       feesAmount: outcome.fees,
       action: outcome.actionLog,
       withdrawal: outcome.withdrawal,
+      taxPaid: taxOwed,
       endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
       rmdAmount,
       nominalWithdrawal,
@@ -507,9 +516,20 @@ export const runSimulation = (
       const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
       // Blended effective tax rate: only the fraction held in tax-deferred accounts
       // is taxable on withdrawal. See generateAuditLog for the identical derivation.
-      const effectiveTaxRate = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
-      const grossBaseSpend = effectiveTaxRate > 0 && baseSpend > 0 ? baseSpend / (1 - effectiveTaxRate) : baseSpend;
-      state.spend = baseSpend < 0 ? baseSpend : Math.max(grossBaseSpend, rmdThisYear);
+      const taxRate = inputs.withdrawalTaxRate / 100;
+      const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
+
+      let taxOwed = 0;
+      if (baseSpend > 0) {
+        const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
+        const taxFromNeeds = grossBaseSpend - baseSpend;
+        const taxFromRMD = rmdThisYear * taxRate;
+        taxOwed = Math.max(taxFromNeeds, taxFromRMD);
+      } else {
+        taxOwed = rmdThisYear * taxRate;
+      }
+      
+      state.spend = baseSpend + taxOwed;
 
       const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
       // Cash (HYSA/money market) cannot have negative nominal returns.

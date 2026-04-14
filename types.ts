@@ -46,6 +46,7 @@ export interface AuditRow {
   feesAmount: number;
   action: string;
   withdrawal: number;
+  taxPaid: number;
   endTotal: number;
   // --- CPA-grade additions ---
   rmdAmount: number;        // IRS-mandated minimum distribution for this year (0 if not applicable)

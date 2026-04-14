@@ -628,15 +628,25 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                             {row.action}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
-                            <div>-${row.withdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                            {row.rmdAmount > 0 && (
-                              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wide mt-0.5">
-                                RMD Enforced
+                            {row.withdrawal - row.taxPaid < 0 ? (
+                              <div className="text-emerald-600 dark:text-emerald-500 font-bold">
+                                Deposit: +${Math.abs(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            ) : (
+                              <div>
+                                Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </div>
                             )}
-                            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                              ≈${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })} nominal
+                            {row.taxPaid > 0 && <div className="text-red-600 dark:text-red-400">Tax: -${row.taxPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>}
+                            <div className="font-bold border-t border-slate-200 dark:border-slate-700 mt-1 pt-1 text-slate-800 dark:text-slate-200">
+                              Total Draw: {row.withdrawal < 0 ? '+' : '-'}${Math.abs(row.withdrawal).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
+                            
+                            {row.rmdAmount > 0 && (
+                              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wide mt-1">
+                                RMD Evaluated
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200 transition-colors">
                             ${row.endTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
