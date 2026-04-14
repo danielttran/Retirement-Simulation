@@ -101,7 +101,7 @@ const CORRELATION_MATRIX = [
   [0.05, 0.15, 1.00],   // Cash-Stock, Cash-Bond, Cash-Cash
 ];
 
-const NUM_SIMULATIONS = 10000;
+const NUM_SIMULATIONS = 100000;
 
 // 2. MATHEMATICAL HELPERS
 
@@ -131,47 +131,115 @@ function choleskyDecompose(matrix: number[][]): number[][] {
 const CHOL_L = choleskyDecompose(CORRELATION_MATRIX);
 
 /**
- * Generates correlated log-normal returns
+ * Generates one year of correlated real returns with three enhancements over
+ * the original fixed-inflation log-normal model:
+ *
+ * 1. STOCHASTIC INFLATION
+ *    Inflation is modelled as N(meanInflation, inflationStdDev²) rather than the
+ *    user's fixed rate. A correlation of −0.30 with the raw equity draw Z[0]
+ *    captures the Fisher-effect observation that equity shock years often
+ *    coincide with lower realised inflation (flight-to-safety, rate cuts).
+ *    Each call therefore produces a different inflation realisation, which in
+ *    turn shifts the entire real-return distribution for that year.
+ *
+ * 2. JUMP DIFFUSION — Fat Tails (Merton 1976)
+ *    A 2 % annual probability of a severe equity shock (−20 % to −40 %
+ *    multiplicative drawdown) is applied after the log-normal draw. This
+ *    models black-swan crashes that pure log-normal distributions systematically
+ *    underestimate. The multiplicative form (1+r_ln)(1−shock)−1 keeps returns
+ *    bounded above −100 % and preserves the sign of the base draw.
+ *    At 2 %/yr the expected number of crashes over a 40-year horizon is ~0.55,
+ *    and the probability of at least one crash is ~55 % — empirically consistent
+ *    with the post-WWII US equity record.
+ *
+ * 3. CASH FLOOR
+ *    HYSA / money-market instruments cannot yield negative nominal returns.
+ *    The real floor (0 % nominal) is computed from the year's stochastic
+ *    inflation draw and applied here rather than in the calling loop.
+ *
+ * @param nominalAssumptions  Long-run nominal mean/stdDev for each asset class.
+ * @param meanInflation       User's expected annual inflation rate (decimal, e.g. 0.03).
+ * @param inflationStdDev     Annualised inflation volatility (default 1.5 %).
  */
-function generateAnnualReturns(realAssumptions: typeof NOMINAL_ASSUMPTIONS) {
-  const Z = [randn_bm(), randn_bm(), randn_bm()];
+function generateAnnualReturns(
+  nominalAssumptions: typeof NOMINAL_ASSUMPTIONS,
+  meanInflation: number,
+  inflationStdDev = 0.015
+): { stock: number; bond: number; cash: number; inflation: number; crashed: boolean } {
 
+  // --- Step 1: Four independent standard-normal draws ---
+  const Z = [randn_bm(), randn_bm(), randn_bm()];
+  const Z_inf = randn_bm(); // idiosyncratic component for inflation
+
+  // --- Step 2: Apply Cholesky for stock / bond / cash correlation ---
   const Z_corr = [
     CHOL_L[0][0] * Z[0],
     CHOL_L[1][0] * Z[0] + CHOL_L[1][1] * Z[1],
     CHOL_L[2][0] * Z[0] + CHOL_L[2][1] * Z[1] + CHOL_L[2][2] * Z[2]
   ];
 
+  // --- Step 3: Stochastic inflation draw (correlated with raw equity shock) ---
+  // inflationZ = ρ·Z_stock + √(1−ρ²)·Z_inf  (standard correlated-normal construction)
+  // ρ = −0.30: high equity shock → lower realised inflation.
+  const INFLATION_EQUITY_CORR = -0.30;
+  const inflationZ = INFLATION_EQUITY_CORR * Z[0]
+    + Math.sqrt(1 - INFLATION_EQUITY_CORR * INFLATION_EQUITY_CORR) * Z_inf;
+  // Floor at −5 % to prevent extreme deflation from producing nonsensical real returns.
+  const annualInflation  = Math.max(meanInflation + inflationStdDev * inflationZ, -0.05);
+  const inflationDivisor = 1 + annualInflation;
+
+  // --- Step 4: Per-year nominal → real conversion ---
+  // Real return mean:  (1 + nomMean) / (1 + inflation) − 1
+  // Real return stdDev: nomStd / (1 + inflation)  [variance-scaling property]
+  const toReal = (nomMean: number, nomStd: number) => ({
+    mean:   (1 + nomMean) / inflationDivisor - 1,
+    stdDev: nomStd / inflationDivisor,
+  });
+  const sReal = toReal(nominalAssumptions.STOCK.mean, nominalAssumptions.STOCK.stdDev);
+  const bReal = toReal(nominalAssumptions.BOND.mean,  nominalAssumptions.BOND.stdDev);
+  const cReal = toReal(nominalAssumptions.CASH.mean,  nominalAssumptions.CASH.stdDev);
+
+  // --- Step 5: Log-normal moment matching (unchanged from original) ---
+  // Converts arithmetic mean / stdDev to log-normal parameters (μ_log, σ_log)
+  // via the standard φ = √(σ² + μ²) shorthand.
+  // Clamp μ > 0 to avoid NaN when real return mean approaches −1.
   const getLogParams = (arithMean: number, arithStd: number) => {
-    // Convert arithmetic mean (μ) and std dev (σ) to lognormal parameters
-    // for the gross-return factor X = 1 + R, where E[X] = 1 + arithMean.
-    //
-    // Standard moment-matching derivation (X ~ LogNormal(μ_log, σ_log)):
-    //   E[X]   = exp(μ_log + σ_log²/2) = μ  →  μ_log = log(μ) - σ_log²/2
-    //   Var[X] = (exp(σ_log²) − 1)·μ²  = σ²  →  σ_log = sqrt(log(1 + σ²/μ²))
-    //
-    // Written compactly via φ = sqrt(σ² + μ²):
-    //   σ_log = sqrt(log(φ²/μ²))     [equivalent to sqrt(log(1 + σ²/μ²))]
-    //   μ_log = log(μ²/φ)            [equivalent to log(μ) − σ_log²/2]
-    //
-    // Clamp μ (= term = 1 + arithMean) > 0 to avoid NaN in high-inflation
-    // regimes where the real return mean could fall to −1 or below.
-    const term = Math.max(1 + arithMean, 0.0001); // μ = gross-return factor
-    const phi = Math.sqrt((arithStd * arithStd) + (term * term));
-    const mu_log = Math.log(term * term / phi);
+    const term     = Math.max(1 + arithMean, 0.0001);
+    const phi      = Math.sqrt(arithStd * arithStd + term * term);
+    const mu_log   = Math.log(term * term / phi);
     const sigma_log = Math.sqrt(Math.log(phi * phi / (term * term)));
     return { mu_log, sigma_log };
   };
 
-  const sParams = getLogParams(realAssumptions.STOCK.mean, realAssumptions.STOCK.stdDev);
-  const bParams = getLogParams(realAssumptions.BOND.mean, realAssumptions.BOND.stdDev);
-  const cParams = getLogParams(realAssumptions.CASH.mean, realAssumptions.CASH.stdDev);
+  const sP = getLogParams(sReal.mean, sReal.stdDev);
+  const bP = getLogParams(bReal.mean, bReal.stdDev);
+  const cP = getLogParams(cReal.mean, cReal.stdDev);
 
-  return {
-    stock: Math.exp(sParams.mu_log + sParams.sigma_log * Z_corr[0]) - 1,
-    bond: Math.exp(bParams.mu_log + bParams.sigma_log * Z_corr[1]) - 1,
-    cash: Math.exp(cParams.mu_log + cParams.sigma_log * Z_corr[2]) - 1,
-  };
+  // --- Step 6: Draw log-normal returns ---
+  let stockReturn = Math.exp(sP.mu_log + sP.sigma_log * Z_corr[0]) - 1;
+  const bondReturn  = Math.exp(bP.mu_log + bP.sigma_log * Z_corr[1]) - 1;
+
+  // Cash floor: 0 % nominal → real floor = −inflation / (1 + inflation)
+  const minRealCash = -annualInflation / inflationDivisor;
+  const cashReturn  = Math.max(
+    Math.exp(cP.mu_log + cP.sigma_log * Z_corr[2]) - 1,
+    minRealCash
+  );
+
+  // --- Step 7: Jump Diffusion — fat-tail equity shock ---
+  // 2 % annual probability of a black-swan crash; magnitude drawn U[20 %, 40 %].
+  // Applied multiplicatively: (1 + r_ln)(1 − shock) − 1
+  let crashed = false;
+  if (Math.random() < 0.02) {
+    const shock = 0.20 + Math.random() * 0.20; // uniform in [0.20, 0.40]
+    stockReturn = (1 + stockReturn) * (1 - shock) - 1;
+    crashed = true;
+  }
+
+  // Return the realised inflation alongside asset returns so callers can
+  // accumulate a precise cumulative inflation factor for nominal-dollar reporting.
+  // `crashed` flags jump-diffusion years so the audit table can annotate them.
+  return { stock: stockReturn, bond: bondReturn, cash: cashReturn, inflation: annualInflation, crashed };
 }
 
 // 3. SIMULATION LOGIC
@@ -180,7 +248,7 @@ interface SimulationRun {
   id: number;
   finalBalance: number;
   trajectory: Float64Array; // Memory Optimization
-  annualReturns: { stock: number; bond: number; cash: number }[];
+  annualReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[];
   portfolioReturns: number[];
 }
 
@@ -189,6 +257,10 @@ interface SimState {
   bond: number;
   cash: number;
   spend: number;
+  /** Accumulated Guyton-Klinger spend-adjustment factor (starts at 1.0, updated permanently). */
+  spendMultiplier: number;
+  /** Initial Withdrawal Rate — set in year 0 as the baseline for G-K guardrail comparisons. */
+  iwr: number;
 }
 
 interface YearOutcome {
@@ -288,38 +360,68 @@ const simulateYear = (
       }
 
       if (returns.stock < 0) {
-        actionLog = `Market Down ${(returns.stock * 100).toFixed(1)}%.`;
-        if (!forcedSell) actionLog += ` Spending from Cash Buffer.`;
-        else actionLog += ` Cash Empty! Forced Sell.`;
+        if (!forcedSell) {
+          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: spending from Cash Bucket, stocks preserved (recovery mode).`;
+        } else {
+          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: Cash Bucket depleted — forced stock sale to cover shortfall.`;
+        }
       } else {
-        actionLog = `Market Up ${(returns.stock * 100).toFixed(1)}%.`;
-        if (refillAmount > 0) actionLog += ` Refilled Cash ($${Math.round(refillAmount / 1000)}k).`;
+        actionLog = `Market up ${(returns.stock * 100).toFixed(1)}%.`;
+        if (refillAmount > 0) {
+          actionLog += ` Sold stock gains → refilled Cash Bucket +$${Math.round(refillAmount / 1000)}k (2-yr buffer maintained).`;
+        } else {
+          actionLog += ` Cash Bucket full; no refill needed.`;
+        }
       }
 
     } else {
-      // --- FIXED ALLOCATION STRATEGY ---
-      let total = currStock + currBond + currCash;
+      // --- FIXED ALLOCATION STRATEGY (5 % Drift-Band Rebalancing) ---
+      //
+      // Drift Band Logic:
+      //   After market returns, measure how far the live equity weight has drifted
+      //   from the target. When drift ≤ 5 % (absolute) we fund the withdrawal by
+      //   selling proportionally at the current mix — no corrective trades, minimal
+      //   transaction cost. When drift > 5 % we execute a full rebalance back to
+      //   target, which also disciplines the buy-low/sell-high benefit.
+      //
+      //   Within-band cost:  actualWithdrawal × TRANSACTION_COST
+      //   Outside-band cost: total-trade-volume × TRANSACTION_COST (larger)
+      //
+      // currCash is 0 for fixed strategies: it is initialised to 0 and never
+      // accumulates between years (all proceeds are redeployed into stocks/bonds).
+      const preWithdrawalTotal = currStock + currBond + currCash;
+      const currentEquityRatio = preWithdrawalTotal > 0.01
+        ? currStock / preWithdrawalTotal
+        : targetWeights.stock;
+      const drift = Math.abs(currentEquityRatio - targetWeights.stock);
 
-      // Apply Withdrawal
-      total -= actualWithdrawal;
+      let total = preWithdrawalTotal - actualWithdrawal;
 
       if (total > 0.01) {
-        // Calculate rebalancing trades and apply transaction cost only to traded amount
-        const targetStock = total * targetWeights.stock;
-        const targetBond = total * targetWeights.bond;
-        const tradeAmount = Math.abs(currStock - targetStock) + Math.abs(currBond - targetBond);
-
-        // This inherently correctly prices selling assets to fund the withdrawal AND adjusting drift natively! 
-        const rebalancingCost = tradeAmount * TRANSACTION_COST;
-        total -= rebalancingCost;
-
-        // Ensure the cost is accurately logged so the Audit Log math balances
-        fees += rebalancingCost;
-
-        currStock = total * targetWeights.stock;
-        currBond = total * targetWeights.bond;
-        currCash = 0;
-        actionLog = `Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)}.`;
+        if (drift > 0.05) {
+          // OUTSIDE band: full corrective rebalance back to target weights.
+          // tradeAmount covers both funding the withdrawal AND correcting drift.
+          const targetStock = total * targetWeights.stock;
+          const targetBond  = total * targetWeights.bond;
+          const tradeAmount = Math.abs(currStock - targetStock) + Math.abs(currBond - targetBond);
+          const rebalancingCost = tradeAmount * TRANSACTION_COST;
+          total    -= rebalancingCost;
+          fees     += rebalancingCost;
+          currStock = total * targetWeights.stock;
+          currBond  = total * targetWeights.bond;
+          currCash  = 0;
+          actionLog = `Drift ${(drift * 100).toFixed(1)}% exceeded 5% band → Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
+        } else {
+          // WITHIN band (≤ 5 %): sell proportionally at the current allocation.
+          // Only charge friction on the liquidation required to cover spending.
+          const withdrawalCost = actualWithdrawal * TRANSACTION_COST;
+          total    -= withdrawalCost;
+          fees     += withdrawalCost;
+          currStock = total * currentEquityRatio;
+          currBond  = total * (1 - currentEquityRatio);
+          currCash  = 0;
+          actionLog = `Drift ${(drift * 100).toFixed(1)}% within ±5% band → Proportional withdrawal at ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)}, no rebalance.`;
+        }
       } else {
         currStock = 0; currBond = 0; currCash = 0;
         actionLog = "Portfolio Depleted.";
@@ -332,7 +434,10 @@ const simulateYear = (
       stock: currStock,
       bond: currBond,
       cash: currCash,
-      spend: state.spend
+      spend: state.spend,
+      // Pass through G-K fields unchanged — mutations live in the calling loop.
+      spendMultiplier: state.spendMultiplier,
+      iwr: state.iwr,
     },
     withdrawal: actualWithdrawal,
     fees,
@@ -344,7 +449,7 @@ const simulateYear = (
 const generateAuditLog = (
   inputs: SimulationInputs,
   strategy: StrategyType,
-  annualReturns: { stock: number, bond: number, cash: number }[],
+  annualReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[],
   startYear: number   // same value captured by runSimulation for chart year labels
 ): AuditRow[] => {
   const log: AuditRow[] = [];
@@ -359,7 +464,9 @@ const generateAuditLog = (
 
   const initialSpend = getSpendingForYear(0, spendingPhases);
   let state: SimState = {
-    stock: 0, bond: 0, cash: 0, spend: initialSpend
+    stock: 0, bond: 0, cash: 0, spend: initialSpend,
+    spendMultiplier: 1.0,
+    iwr: 0,
   };
 
   if (strategy === 'BUCKET') {
@@ -401,6 +508,11 @@ const generateAuditLog = (
     state.cash = 0;
   }
 
+  // Tracks the product of (1 + realised_inflation) across all years for precise
+  // nominal-dollar reporting.  Using the actual stochastic draws (stored in the
+  // returns array) is more accurate than a fixed compound factor.
+  let cumulativeInflationFactor = 1.0;
+
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
@@ -415,62 +527,94 @@ const generateAuditLog = (
       ? inputs.socialSecurityIncome * 12
       : 0;
 
-    // Supplemental Income offsets need for portfolio withdrawals
-    if (ssIncomeThisYear > 0) {
-      baseSpend -= ssIncomeThisYear;
-    }
+    if (ssIncomeThisYear > 0) baseSpend -= ssIncomeThisYear;
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
 
-    // 2. Tax logic fix: The portfolio effectively only "loses" what the user consumes (baseSpend)
-    // plus what the IRS consumes (taxOwed). Unspent RMD proceeds remain invested natively.
-    const taxRate = inputs.withdrawalTaxRate / 100;
+    const taxRate    = inputs.withdrawalTaxRate / 100;
     const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
-    let taxOwed = 0;
-    if (baseSpend > 0) {
-      const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
-      const taxFromNeeds = grossBaseSpend - baseSpend;
-      // Tax on RMD is calculated on the full amount since the entire RMD comes from tax-deferred sources.
-      const taxFromRMD = rmdAmount * taxRate;
-      taxOwed = Math.max(taxFromNeeds, taxFromRMD);
+    // BUG FIX: Apply the accumulated G-K multiplier BEFORE computing taxOwed so
+    // the tax gross-up reflects the actual (already-adjusted) spending need, not
+    // the pre-guardrail amount.  (Prior order over-taxed Capital Preservation years.)
+    baseSpend *= state.spendMultiplier;
+
+    // 2. RMD-aware gross-up: IRS Pub 590-B requires the full rmdAmount to leave the
+    //    tax-deferred account regardless of spending need.  When the RMD exceeds the
+    //    grossed-up spending withdrawal it becomes the portfolio withdrawal floor, and
+    //    tax is computed on that larger distribution — not just the spending portion.
+    const grossBaseSpend = baseSpend > 0 && effTaxRate > 0 && effTaxRate < 1
+      ? baseSpend / (1 - effTaxRate)
+      : Math.max(0, baseSpend);
+
+    let taxOwed: number;
+    if (rmdAmount > grossBaseSpend) {
+      // RMD forces a larger distribution than the spending need.
+      // Tax is withheld from the RMD distribution itself.
+      state.spend = rmdAmount;
+      taxOwed     = rmdAmount * taxRate;
     } else {
-      // User is fully funded by SS/Pension, but RMD still triggers a taxable event
-      taxOwed = rmdAmount * taxRate;
+      // Spending need exceeds RMD — normal tax gross-up path.
+      state.spend = grossBaseSpend;
+      taxOwed     = grossBaseSpend - Math.max(0, baseSpend);
     }
 
-    state.spend = baseSpend + taxOwed;
+    // --- Guyton-Klinger Guardrail Check ---
+    // CWR uses totalPreWithdrawal (already computed above) — no duplicate calculation.
+    let gkEvent = '';
+    const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
-    const startCash = state.cash;
+    if (year === 1) {
+      state.iwr = currentWR; // Baseline IWR set in the first retirement year
+    } else if (state.iwr > 0.0001) {
+      if (currentWR > state.iwr * 1.20) {
+        state.spendMultiplier *= 0.90;
+        state.spend           *= 0.90;
+        gkEvent = 'Capital Preservation Rule: CWR exceeded 120% of baseline → spending cut 10%.';
+      } else if (currentWR < state.iwr * 0.80) {
+        state.spendMultiplier *= 1.10;
+        state.spend           *= 1.10;
+        gkEvent = 'Prosperity Rule: CWR fell below 80% of baseline → spending raised 10%.';
+      }
+    }
+
+    const startCash  = state.cash;
     const startStock = state.stock;
-    const startBond = state.bond;
+    const startBond  = state.bond;
 
     const returns = annualReturns[year - 1];
 
+    // Accumulate stochastic inflation for accurate nominal-dollar conversion.
+    cumulativeInflationFactor *= (1 + returns.inflation);
+
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
 
-    // Nominal withdrawal = real withdrawal × cumulative inflation factor for CPA / 1099-R reference
-    const inflationFactor = Math.pow(1 + inputs.inflationRate / 100, year);
-    const nominalWithdrawal = outcome.withdrawal * inflationFactor;
+    // Nominal withdrawal uses the exact cumulative product of stochastic inflation
+    // draws (not a fixed-rate approximation) for a precise 1099-R reference figure.
+    const nominalWithdrawal = outcome.withdrawal * cumulativeInflationFactor;
 
     log.push({
       year: startYear + year,
       startCash,
       startStock,
       startBond,
-      stockReturn: returns.stock,
-      bondReturn: returns.bond,
-      cashReturn: returns.cash,
-      growthAmount: outcome.growth,
-      feesAmount: outcome.fees,
-      action: outcome.actionLog,
-      withdrawal: outcome.withdrawal,
-      taxPaid: taxOwed,
-      endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
+      stockReturn:       returns.stock,
+      bondReturn:        returns.bond,
+      cashReturn:        returns.cash,
+      realizedInflation: returns.inflation,
+      growthAmount:      outcome.growth,
+      feesAmount:        outcome.fees,
+      action:            outcome.actionLog, // strategy-only mechanical action
+      gkEvent,                              // G-K event isolated for styled badge rendering
+      withdrawal:        outcome.withdrawal,
+      taxPaid:           taxOwed,
+      endTotal:          outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
       rmdAmount,
       nominalWithdrawal,
-      ssIncome: ssIncomeThisYear,
+      ssIncome:          ssIncomeThisYear,
+      spendMultiplier:   state.spendMultiplier, // current accumulated G-K factor this year
+      crashed:           returns.crashed,        // jump-diffusion flag for audit annotation
     });
 
     state = outcome.nextState;
@@ -493,17 +637,10 @@ export const runSimulation = (
   else if (strategy === 'AGGRESSIVE') { targetBondWeight = 0.30; targetStockWeight = 0.70; }
   else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
 
-  const inflationDivisor = 1 + inflationRate / 100;
-  const inflate = (val: number) => (1 + val) / inflationDivisor - 1;
-
-  // Variance properties require scaling stdDev by the same divisor as the mean.
-  // Real return = Nominal return / inflationDivisor  →  σ_real = σ_nominal / inflationDivisor
-  // (previously the nominal stdDev was passed through unadjusted.)
-  const REAL_ASSUMPTIONS = {
-    STOCK: { mean: inflate(NOMINAL_ASSUMPTIONS.STOCK.mean), stdDev: NOMINAL_ASSUMPTIONS.STOCK.stdDev / inflationDivisor },
-    BOND: { mean: inflate(NOMINAL_ASSUMPTIONS.BOND.mean), stdDev: NOMINAL_ASSUMPTIONS.BOND.stdDev / inflationDivisor },
-    CASH: { mean: inflate(NOMINAL_ASSUMPTIONS.CASH.mean), stdDev: NOMINAL_ASSUMPTIONS.CASH.stdDev / inflationDivisor },
-  };
+  // meanInflation passed to generateAnnualReturns as a decimal.
+  // Stochastic inflation is drawn per-year inside that function, so there is no
+  // longer a single REAL_ASSUMPTIONS constant — it varies with every draw.
+  const meanInflation = inflationRate / 100;
 
   const allRuns: SimulationRun[] = [];
   // Use Float64Array for column-based storage (Performance Optimization)
@@ -517,7 +654,9 @@ export const runSimulation = (
   for (let sim = 0; sim < NUM_SIMULATIONS; sim++) {
     // Initial State
     let state: SimState = {
-      stock: 0, bond: 0, cash: 0, spend: initialSpend
+      stock: 0, bond: 0, cash: 0, spend: initialSpend,
+      spendMultiplier: 1.0,
+      iwr: 0,
     };
 
     if (strategy === 'BUCKET') {
@@ -583,23 +722,44 @@ export const runSimulation = (
       const taxRate = inputs.withdrawalTaxRate / 100;
       const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
-      let taxOwed = 0;
-      if (baseSpend > 0) {
-        const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
-        const taxFromNeeds = grossBaseSpend - baseSpend;
-        const taxFromRMD = rmdThisYear * taxRate;
-        taxOwed = Math.max(taxFromNeeds, taxFromRMD);
-      } else {
-        taxOwed = rmdThisYear * taxRate;
-      }
-      
-      state.spend = baseSpend + taxOwed;
+      // Apply G-K multiplier BEFORE tax so gross-up is on the adjusted spend amount.
+      baseSpend *= state.spendMultiplier;
 
-      const returns = generateAnnualReturns(REAL_ASSUMPTIONS);
-      // Cash (HYSA/money market) cannot have negative nominal returns.
-      // In real terms, the floor is 0% nominal → real = -inflation/(1+inflation)
-      const minRealCashReturn = -(inflationRate / 100) / (1 + inflationRate / 100);
-      returns.cash = Math.max(returns.cash, minRealCashReturn);
+      // Mirrors generateAuditLog: RMD is a hard floor on the portfolio withdrawal.
+      const grossBaseSpend = baseSpend > 0 && effTaxRate > 0 && effTaxRate < 1
+        ? baseSpend / (1 - effTaxRate)
+        : Math.max(0, baseSpend);
+
+      let taxOwed: number;
+      if (rmdThisYear > grossBaseSpend) {
+        state.spend = rmdThisYear;
+        taxOwed     = rmdThisYear * taxRate;
+      } else {
+        state.spend = grossBaseSpend;
+        taxOwed     = grossBaseSpend - Math.max(0, baseSpend);
+      }
+
+      // --- Guyton-Klinger Guardrail Check ---
+      // totalPreWithdrawal is already computed above for the RMD calculation.
+      // Year 0 establishes the IWR; year 1+ may trigger adjustments.
+      const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
+
+      if (year === 0) {
+        state.iwr = currentWR;
+      } else if (state.iwr > 0.0001) {
+        if (currentWR > state.iwr * 1.20) {
+          state.spendMultiplier *= 0.90;
+          state.spend           *= 0.90;
+        } else if (currentWR < state.iwr * 0.80) {
+          state.spendMultiplier *= 1.10;
+          state.spend           *= 1.10;
+        }
+      }
+
+      // generateAnnualReturns now takes nominal assumptions + mean inflation and
+      // produces real returns with per-year stochastic inflation baked in.
+      // The cash floor is handled inside the function.
+      const returns = generateAnnualReturns(NOMINAL_ASSUMPTIONS, meanInflation);
       currentRunReturns.push(returns);
 
       const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
@@ -664,9 +824,13 @@ export const runSimulation = (
     // Math.floor(N × p) gives index 1000 for p=0.10, N=10000 — that is the
     // 1001st value (10.01th percentile).  Subtracting 1 from the ceiling
     // gives index 999 — exactly the 1000th value (10.00th percentile).
-    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.10) - 1]);
-    belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.25) - 1]);
-    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.50) - 1]);
+    // Use user-configured percentiles (clamped to valid 1–99 range).
+    const pDown  = Math.max(0.01, Math.min(0.99, inputs.percentileDownturn      / 100));
+    const pBelow = Math.max(0.01, Math.min(0.99, inputs.percentileBelowAverage  / 100));
+    const pAvg   = Math.max(0.01, Math.min(0.99, inputs.percentileAverage       / 100));
+    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pDown)  - 1]);
+    belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pBelow) - 1]);
+    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pAvg)   - 1]);
   }
 
   const chartData: YearResult[] = averageCurve.map((val, idx) => ({

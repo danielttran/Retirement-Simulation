@@ -84,31 +84,57 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const startYear = results.data.length > 0 ? results.data[0].year : new Date().getFullYear();
 
   const aiPromptText = useMemo(() => {
-    return `Retirement Simulation Validation Request:
-Please evaluate the mathematical correctness and risk of the following retirement plan.
+    const auditRows = results.auditLogAverage;
+    const auditSample = auditRows.slice(0, 10).map(r =>
+      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round(r.startCash + r.startStock + r.startBond).toLocaleString()} | Stock ${(r.stockReturn*100).toFixed(1)}% Bond ${(r.bondReturn*100).toFixed(1)}% Infl ${(r.realizedInflation*100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount).toLocaleString()} | Fees -$${Math.round(r.feesAmount).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal).toLocaleString()} (Tax -$${Math.round(r.taxPaid).toLocaleString()}) | SS +$${Math.round(r.ssIncome).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount).toLocaleString()} | End $${Math.round(r.endTotal).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
+    ).join('\n');
+
+    return `Retirement Simulation Validation Request
+Please evaluate the mathematical correctness, IRS compliance, and financial risk of the following retirement plan.
 
 --- INPUTS ---
 Portfolio: $${(inputs.initialCash + inputs.initialInvestments).toLocaleString()} (Cash: $${inputs.initialCash.toLocaleString()}, Investments: $${inputs.initialInvestments.toLocaleString()})
-Start Year: ${startYear}
-Time Horizon: ${inputs.timeHorizon} years
-Inflation Rate: ${inputs.inflationRate}%
+Start Year: ${startYear}  |  Time Horizon: ${inputs.timeHorizon} years
+Inflation Rate (mean): ${inputs.inflationRate}%
 Management Fee: ${inputs.managementFee}%
-Retirement Age: ${inputs.currentAge} years
-Tax Deferred Ratio: ${inputs.taxDeferredRatio}%
-Withdrawal Tax Rate: ${inputs.withdrawalTaxRate}%
-Social Security Income: $${inputs.socialSecurityIncome.toLocaleString()}/mo starting at age ${inputs.socialSecurityAge}
+Retirement Age: ${inputs.currentAge} years  |  Birth Year: ${inputs.birthYear}
+Tax-Deferred Ratio: ${inputs.taxDeferredRatio}%  |  Withdrawal Tax Rate: ${inputs.withdrawalTaxRate}%
+Social Security: $${inputs.socialSecurityIncome.toLocaleString()}/mo starting at age ${inputs.socialSecurityAge}
 
 --- SPENDING PHASES ---
-${inputs.spendingPhases.map(p => `Year ${p.startYear} to ${p.endYear}: $${p.annualSpend.toLocaleString()}/yr`).join('\n')}
+${inputs.spendingPhases.map(p => `  Year ${p.startYear}–${p.endYear}: $${p.annualSpend.toLocaleString()}/yr (in today's dollars)`).join('\n')}
 
---- STRATEGY SETTINGS ---
+--- STRATEGY ---
 Selected Strategy: ${selectedStrategy}
 Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(results.allocation.bond * 100).toFixed(1)}% Bond / ${(results.allocation.cash * 100).toFixed(1)}% Cash
 
---- SIMULATION RESULTS (10,000 Monte Carlo Runs) ---
-Success Rate: ${results.successRate.toFixed(1)}% (Portfolio > $0 at end of term)
-Expected Final Median Value (Real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
+--- SIMULATION MODEL (for your reference) ---
+Engine: 100,000-path Monte Carlo, log-normal returns, Cholesky correlation (Stock–Bond ρ=−0.15)
+Market Assumptions: Stock μ=8.5%/σ=17%, Bond μ=4.0%/σ=5%, Cash μ=2.5%/σ=1.5% (all nominal)
+Stochastic Inflation: N(${inputs.inflationRate}%, 1.5%²) drawn per year; correlated −0.30 with equity draw
+Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawdown beyond log-normal
+Guyton-Klinger Guardrails: CWR > 120% of IWR → spending −10%; CWR < 80% of IWR → spending +10%
+Drift-Band Rebalancing: ±5% absolute equity ratio band; proportional sell within band, full rebalance outside
+RMD: SECURE 2.0 / IRS Pub 590-B; mandatory floor enforced (if RMD > spending need, RMD sets the withdrawal)
+Tax Gross-Up: blended effective rate = withdrawalTaxRate × (taxDeferredRatio/100); spending grossed up so portfolio withdrawal funds both spend and taxes
+All portfolio values are in real (today's) dollars; nominalWithdrawal for 1099-R reference uses cumulative stochastic inflation
+Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowAverage} (gold), P${inputs.percentileDownturn} (red) of 100,000 runs
+
+--- SIMULATION RESULTS ---
+Success Rate: ${results.successRate.toFixed(1)}% (portfolio > $0 at end of ${inputs.timeHorizon}-year term)
+Median Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
+
+--- AUDIT LOG SAMPLE — P${inputs.percentileAverage} (Median) Run, First 10 Years ---
+(All $ in real today's dollars. Verify: Start + Growth − Fees − Withdrawal = End)
+${auditSample}
+
+--- QUESTIONS FOR YOUR REVIEW ---
+1. Is the success rate appropriate given the spending and allocation?
+2. Are there any IRS compliance concerns (RMD timing, tax gross-up, SS offset)?
+3. Does the spending plan appear sustainable through the full ${inputs.timeHorizon}-year horizon?
+4. Are the Guyton-Klinger adjustments (if any, see audit) appropriate given the withdrawal rate?
+5. Any red flags in the first-year withdrawal math or fee structure?
 `;
   }, [inputs, results, selectedStrategy, startYear]);
 
@@ -157,17 +183,17 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
           <p className="mb-4">
             A traditional <strong>Fixed Allocation</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
           </p>
-          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Yearly Rebalancing):</p>
+          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Drift-Band Rebalancing):</p>
           <ul className="list-disc pl-4 space-y-2 mb-4">
             <li>
-              <strong>If Stock is UP:</strong> The portfolio has too much stock. We sell some stock to refill our bonds and pay expenses.
+              <strong>If drift ≤ 5 %:</strong> Withdrawal is funded proportionally at the current mix — no corrective trades, minimal friction cost.
             </li>
             <li>
-              <strong>If Stock is DOWN:</strong> The portfolio has too many bonds. We spend from the bonds (selling them) to pay expenses and buy cheap stocks to restore the ratio.
+              <strong>If drift &gt; 5 %:</strong> A full rebalance is executed back to target, automatically buying cheap assets and trimming the overweight ones.
             </li>
           </ul>
           <p>
-            This disciplined approach automatically forces you to buy low and sell high while ensuring you always have the target mix of safety (bonds) and growth (stocks).
+            The 5 % band eliminates unnecessary round-trip costs in calm markets while preserving the buy-low / sell-high discipline when allocations drift materially.
           </p>
         </>
       )
@@ -477,7 +503,7 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">Portfolio Projection</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">10,000 market scenarios simulated <span className="text-slate-300 dark:text-slate-700 mx-2">•</span> Last Run: {runTime}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">100,000 market scenarios simulated <span className="text-slate-300 dark:text-slate-700 mx-2">•</span> Last Run: {runTime}</p>
                 </div>
 
                 <div className="flex flex-col md:items-end gap-4">
@@ -626,21 +652,21 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                 </h4>
                 <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6 transition-colors">
                   <div>
-                    <span className="block font-bold text-growth-green text-xs mb-1">Average Market (Green)</span>
+                    <span className="block font-bold text-growth-green text-xs mb-1">Average Market — P{inputs.percentileAverage} (Green)</span>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Represents the median outcome (50th percentile). In 50% of historical scenarios, your portfolio performed better than this line. This is a realistic target for "normal" market conditions.
+                      The {inputs.percentileAverage}th-percentile outcome: {inputs.percentileAverage}% of the 100,000 runs finished below this line. This is your baseline planning target for normal market conditions.
                     </p>
                   </div>
                   <div>
-                    <span className="block font-bold text-below-avg-gold text-xs mb-1">Below Average (Gold)</span>
+                    <span className="block font-bold text-below-avg-gold text-xs mb-1">Below Average — P{inputs.percentileBelowAverage} (Gold)</span>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      The 25th percentile outcome. This line shows a sluggish market environment where growth is consistently lower than historical averages. Good for conservative planning.
+                      The {inputs.percentileBelowAverage}th-percentile outcome. Shows a sluggish market where growth is consistently below historical averages. Good for conservative planning.
                     </p>
                   </div>
                   <div>
-                    <span className="block font-bold text-downturn-red text-xs mb-1">Significant Downturn (Red)</span>
+                    <span className="block font-bold text-downturn-red text-xs mb-1">Downturn — P{inputs.percentileDownturn} (Red)</span>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      The 10th percentile "stress test". This simulates a prolonged recession or poor sequence of returns. If this line stays above $0, your plan is highly resilient.
+                      The {inputs.percentileDownturn}th-percentile stress test. Only {inputs.percentileDownturn}% of runs were worse than this. If this line stays above $0, your plan is highly resilient.
                     </p>
                   </div>
                 </div>
@@ -677,19 +703,19 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                         onClick={() => setAuditScenario('AVERAGE')}
                         className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${auditScenario === 'AVERAGE' ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
                       >
-                        Average Market
+                        Average Market (P{inputs.percentileAverage})
                       </button>
                       <button
                         onClick={() => setAuditScenario('BELOW')}
                         className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${auditScenario === 'BELOW' ? 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
                       >
-                        Below Average
+                        Below Average (P{inputs.percentileBelowAverage})
                       </button>
                       <button
                         onClick={() => setAuditScenario('DOWNTURN')}
                         className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all ${auditScenario === 'DOWNTURN' ? 'bg-white dark:bg-slate-900 text-red-700 dark:text-red-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
                       >
-                        Significant Downturn
+                        Downturn (P{inputs.percentileDownturn})
                       </button>
                     </div>
                   )}
@@ -703,20 +729,81 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                 </div>
               </div>
 
+              {/* ── Audit Legend ─────────────────────────────────── */}
+              {auditMode && (
+                <div className="mx-6 mb-4 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Audit Legend — How to Read This Table</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-[11px] text-slate-600 dark:text-slate-400">
+                    <div className="flex items-start gap-2">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400 font-bold whitespace-nowrap shrink-0">
+                        <span className="material-symbols-outlined text-xs leading-none">bolt</span>Crash Event
+                      </span>
+                      <span>Jump diffusion fired (Merton model): ~2% annual chance of an extra 20–40% equity drawdown on top of normal log-normal variance.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 font-bold whitespace-nowrap shrink-0">
+                        <span className="material-symbols-outlined text-xs leading-none">shield</span>Capital Preservation
+                      </span>
+                      <span>Guyton-Klinger: current withdrawal rate exceeded 120% of the initial rate → spending automatically cut by 10% this year and permanently.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold whitespace-nowrap shrink-0">
+                        <span className="material-symbols-outlined text-xs leading-none">trending_up</span>Prosperity Rule
+                      </span>
+                      <span>Guyton-Klinger: current withdrawal rate dropped below 80% of the initial rate → spending raised by 10% this year and permanently.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap shrink-0">
+                        <span className="material-symbols-outlined text-xs leading-none">verified</span>RMD: $X (met)
+                      </span>
+                      <span>IRS Required Minimum Distribution (SECURE 2.0 / Pub 590-B). Withdrawal was floored at this amount; displayed in real today's dollars.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0">GK Multiplier ×X.XXX</span>
+                      <span>Accumulated compounding of all past G-K guardrail adjustments. Multiplier &lt; 1.0 = spending has been cut overall; &gt; 1.0 = raised overall.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-purple-500 dark:text-purple-400 whitespace-nowrap shrink-0">Infl: X.X% (purple)</span>
+                      <span>Realised stochastic inflation this year (randomly drawn, mean = your target rate, σ = 1.5%). Differs from your input each year by design.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Nominal (1099-R): ~$X</span>
+                      <span>The same withdrawal converted to future (nominal) dollars using cumulative stochastic inflation — matches what would appear on an IRS Form 1099-R.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Total Draw = Spend + Tax</span>
+                      <span>Portfolio is reduced by <em>gross</em> withdrawal (spend need + blended tax on deferred accounts). Tax is withheld from the distribution, not paid separately.</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 border-t border-slate-200 dark:border-slate-700 pt-2">
+                    Math check: <strong>Start Balance + Growth − Fees − Total Draw = End Balance</strong> for every row. All values in real (today's) dollars unless "Nominal" is specified.
+                  </p>
+                </div>
+              )}
+
               <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
                 <table className="w-full text-sm text-left relative">
                   {auditMode ? (
                     // AUDIT TABLE HEADERS
                     <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-0 z-10 shadow-sm transition-colors">
                       <tr>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year / Age</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Start Balance</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Real Returns</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                          Real Returns
+                          <div className="text-[9px] text-purple-500 dark:text-purple-400 normal-case font-normal tracking-normal mt-0.5">incl. realised inflation</div>
+                        </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Growth</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Strategy Action</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Withdrawal (today's $)</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                          Guardrail &amp; Strategy Action
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Guyton-Klinger + mechanical action</div>
+                        </th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                          Withdrawal (today's $)
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">incl. nominal for 1099-R</div>
+                        </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">End Balance</th>
                       </tr>
                     </thead>
@@ -725,9 +812,18 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                     <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-0 z-10 shadow-sm transition-colors">
                       <tr>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80">Year</th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500">Average Market</th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-below-avg-gold dark:text-amber-500">Below Average</th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-downturn-red dark:text-red-500">Significant Downturn</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500">
+                          Average Market
+                          <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileAverage} of 100k runs</div>
+                        </th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-below-avg-gold dark:text-amber-500">
+                          Below Average
+                          <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileBelowAverage} of 100k runs</div>
+                        </th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-downturn-red dark:text-red-500">
+                          Downturn
+                          <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileDownturn} of 100k runs</div>
+                        </th>
                       </tr>
                     </thead>
                   )}
@@ -739,7 +835,14 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                         <tr key={row.year} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="px-4 py-4 font-bold text-slate-700 dark:text-slate-300 leading-tight">
                             {row.year}
-                            {row.year - startYear > 0 && <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">({row.year - startYear} years away)</div>}
+                            {row.year - startYear > 0 && (
+                              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                                ({row.year - startYear} yrs)
+                              </div>
+                            )}
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                              Age {inputs.currentAge + (row.year - startYear)}
+                            </div>
                           </td>
                           {/* SS / Pension — now in column 2 so it's always visible without horizontal scrolling */}
                           <td className="px-4 py-4 font-medium transition-colors">
@@ -752,18 +855,38 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                             )}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 text-xs text-right md:text-left transition-colors">
-                            <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                            <div className="font-bold text-slate-700 dark:text-slate-300">${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                            {row.startStock > 0 && <div className="text-[10px] text-emerald-600 dark:text-emerald-500">Stk ${row.startStock.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>}
+                            {row.startBond > 0 && <div className="text-[10px] text-blue-500 dark:text-blue-400">Bnd ${row.startBond.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>}
+                            {row.startCash > 0 && <div className="text-[10px] text-slate-400 dark:text-slate-500">Csh ${row.startCash.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>}
                           </td>
                           <td className="px-4 py-4 text-xs font-medium">
-                            <div className={`${row.stockReturn >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>Stock: {(row.stockReturn * 100).toFixed(1)}%</div>
-                            {/* Only show Bond if strategy is NOT Bucket (which has 0 bonds) */}
+                            {/* Jump-diffusion crash flag — annotates years where the 2 % annual
+                                black-swan event fired (Merton 1976), producing the extra-large
+                                equity drawdown beyond normal log-normal variance. */}
+                            {row.crashed && (
+                              <div className="mb-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 flex items-center gap-1 uppercase tracking-wide">
+                                <span className="material-symbols-outlined text-xs leading-none">bolt</span>
+                                Crash Event
+                              </div>
+                            )}
+                            <div className={`${row.stockReturn >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              Stock: {(row.stockReturn * 100).toFixed(1)}%
+                            </div>
                             {selectedStrategy !== 'BUCKET' && (
-                              <div className={`${row.bondReturn >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>Bond: {(row.bondReturn * 100).toFixed(1)}%</div>
+                              <div className={`${row.bondReturn >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
+                                Bond: {(row.bondReturn * 100).toFixed(1)}%
+                              </div>
                             )}
-                            {/* Only show Cash if strategy IS Bucket (Fixed allocations have 0 cash) */}
                             {selectedStrategy === 'BUCKET' && (
-                              <div className="text-slate-400 dark:text-slate-500">Cash: {(row.cashReturn * 100).toFixed(1)}%</div>
+                              <div className="text-slate-400 dark:text-slate-500">
+                                Cash: {(row.cashReturn * 100).toFixed(1)}%
+                              </div>
                             )}
+                            {/* Realised stochastic inflation — varies from the user's mean input */}
+                            <div className={`mt-0.5 border-t border-slate-100 dark:border-slate-800 pt-0.5 ${row.realizedInflation > 0 ? 'text-purple-500 dark:text-purple-400' : 'text-blue-500 dark:text-blue-400'}`}>
+                              Infl: {(row.realizedInflation * 100).toFixed(1)}%
+                            </div>
                           </td>
                           <td className={`px-4 py-4 font-bold ${row.growthAmount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-downturn-red dark:text-red-400'}`}>
                             {row.growthAmount >= 0 ? '+' : ''}${row.growthAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -772,7 +895,29 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                             -${row.feesAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </td>
                           <td className="px-4 py-4 text-xs font-medium text-slate-700 dark:text-slate-400 leading-relaxed transition-colors">
-                            {row.action}
+                            {/* Guyton-Klinger guardrail event — styled as a distinct badge so it
+                                is never confused with the mechanical strategy action below it. */}
+                            {row.gkEvent && (
+                              <div className={`mb-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${
+                                row.gkEvent.startsWith('Capital')
+                                  ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
+                              }`}>
+                                <span className="material-symbols-outlined text-xs leading-none">
+                                  {row.gkEvent.startsWith('Capital') ? 'shield' : 'trending_up'}
+                                </span>
+                                {row.gkEvent}
+                              </div>
+                            )}
+                            {/* Mechanical strategy action (rebalance, bucket refill, etc.) */}
+                            <div>{row.action}</div>
+                            {/* Accumulated G-K spend multiplier — shown whenever it deviates from
+                                the baseline so users can see the compounding effect over years. */}
+                            {Math.abs(row.spendMultiplier - 1.0) > 0.001 && (
+                              <div className="mt-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                GK Multiplier: ×{row.spendMultiplier.toFixed(3)}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
                             {row.withdrawal - row.taxPaid < 0 ? (
@@ -784,25 +929,31 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                                 Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </div>
                             )}
-                            {/* Always show Tax line — grey when $0, red when positive — so users can
-                                verify that the tax gross-up is being applied for all strategies. */}
+                            {/* Tax line — grey when $0, red when positive — lets users verify
+                                the tax gross-up is being applied for all strategies. */}
                             <div className={row.taxPaid > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'}>
                               Tax: {row.taxPaid > 0 ? `-$${row.taxPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0'}
                             </div>
                             <div className="font-bold border-t border-slate-200 dark:border-slate-700 mt-1 pt-1 text-slate-800 dark:text-slate-200">
                               Total Draw: {row.withdrawal < 0 ? '+' : '-'}${Math.abs(row.withdrawal).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
-                            {/* Nominal withdrawal — same amount in future (inflated) dollars — shows that
-                                inflation IS accounted for: the portfolio runs in real terms so a $30k
-                                spend in year 20 costs ~$54k in nominal dollars at 3% inflation. */}
-                            {inputs.inflationRate > 0 && (
-                              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                                Nominal: ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </div>
-                            )}
+                            {/* Nominal (future-dollar) figure uses the actual cumulative product of
+                                stochastic inflation draws — not a fixed-rate approximation.
+                                This is the 1099-R reference amount the retiree would see. */}
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                              Nominal (1099-R): ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
                             {row.rmdAmount > 0 && (
-                              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wide mt-1">
-                                RMD Evaluated
+                              <div className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide ${
+                                Math.abs(row.withdrawal - row.rmdAmount) < 1
+                                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                                  : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                              }`}>
+                                <span className="material-symbols-outlined text-xs leading-none">verified</span>
+                                RMD: ${row.rmdAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} (met)
+                                {Math.abs(row.withdrawal - row.rmdAmount) < 1 && (
+                                  <span className="ml-1 normal-case font-normal">— forced ↑</span>
+                                )}
                               </div>
                             )}
                           </td>
@@ -859,12 +1010,51 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Typical annual swing in portfolio value based on this strategy.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
-                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Starting Safe Withdrawal</span>
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Initial Spend Rate</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{((inputs.spendingPhases[0].annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Initial Rate</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Recommended safe rate is typically 3.5% - 4.0%.</p>
+                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Pre-tax, before SS &amp; G-K adjustments</span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Nominal annual spend ÷ total portfolio. Actual rate adjusts via Guyton-Klinger guardrails. Benchmark: 3.5–4.0%.</p>
               </div>
             </div>
+
+            {/* Model Assumptions Disclosure — for CPA / IRS reviewer transparency.
+                All parameters listed here are fixed research-based constants baked
+                into the Monte Carlo engine. They are NOT user-configurable inputs. */}
+            <details className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <summary className="px-6 py-4 cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none hover:text-slate-700 dark:hover:text-slate-200 transition-colors list-none">
+                <span className="material-symbols-outlined text-sm leading-none">info</span>
+                Model Assumptions (Fixed — For CPA / IRS Review)
+                <span className="material-symbols-outlined text-sm leading-none ml-auto">expand_more</span>
+              </summary>
+              <div className="px-6 pb-5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3 leading-relaxed">
+                  The following parameters are calibrated from peer-reviewed financial research and IRS publications.
+                  They are not exposed as user inputs to prevent inappropriate miscalibration.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-3 text-xs">
+                  {([
+                    { label: 'Inflation Volatility', value: '1.5% std dev', note: 'Annual σ around user\'s mean rate' },
+                    { label: 'Equity–Inflation Correlation', value: '−0.30', note: 'Fisher-effect: crash years → lower inflation' },
+                    { label: 'Market Crash Probability', value: '2% / year', note: 'Merton (1976) jump-diffusion; ~55% chance over 40 yrs' },
+                    { label: 'Crash Severity', value: '20–40% drawdown', note: 'Uniform draw; multiplicative on equity return' },
+                    { label: 'G-K Upper Guardrail', value: '>120% IWR → −10% spend', note: 'Capital Preservation Rule (Guyton-Klinger 2006)' },
+                    { label: 'G-K Lower Guardrail', value: '<80% IWR → +10% spend', note: 'Prosperity Rule (Guyton-Klinger 2006)' },
+                    { label: 'Drift-Band Width', value: '±5% equity ratio', note: 'Full rebalance only outside band; reduces friction' },
+                    { label: 'Transaction Cost', value: '0.05% per trade', note: 'Applied to all liquidation / rebalancing events' },
+                    { label: 'RMD Table', value: 'IRS Uniform Lifetime', note: 'Pub 590-B, SECURE 2.0; thresholds: 72 / 73 / 75' },
+                    { label: 'Simulations Run', value: '100,000', note: 'Monte Carlo; column-major Float64Array storage' },
+                    { label: 'All Values', value: 'Real (Today\'s $)', note: 'Inflation-adjusted throughout; nominal shown for 1099-R' },
+                    { label: 'Stock Model', value: 'Log-normal + Jump', note: 'µ=8.5%, σ=17% nominal; Merton crash overlay' },
+                  ] as { label: string; value: string; note: string }[]).map(({ label, value, note }) => (
+                    <div key={label} className="flex flex-col gap-0.5">
+                      <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{label}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-200">{value}</span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight">{note}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </main >

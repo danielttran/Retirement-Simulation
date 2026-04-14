@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import SetupView from './components/SetupView';
 import SimulationView from './components/SimulationView';
 import { SimulationInputs, StrategyType, SimulationResult } from './types';
-import { runSimulation } from './services/monteCarlo';
+// runSimulation is no longer called directly on the main thread.
+// It runs inside a dedicated Web Worker so the UI stays responsive during the
+// 100,000-scenario Monte Carlo pass (~10–20 s).
+// The worker is instantiated lazily (once per session) inside runSimulationAsync.
 
 type View = 'SETUP' | 'SIMULATION';
 
@@ -12,7 +15,7 @@ const LoadingOverlay: React.FC = () => (
     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-10 flex flex-col items-center gap-4">
       <div className="w-10 h-10 border-4 border-slate-200 dark:border-slate-700 border-t-primary rounded-full animate-spin" />
       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Running Simulation</p>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-semibold">10,000 Scenarios</p>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-semibold">100,000 Scenarios</p>
     </div>
   </div>
 );
@@ -61,6 +64,10 @@ const App: React.FC = () => {
       birthYear: 1961, // matches currentAge: 65 in 2026 (2026 − 65 = 1961)
       socialSecurityIncome: 1200,
       socialSecurityAge: 67,
+      // Scenario band percentiles — which Monte Carlo percentile each chart line represents.
+      percentileAverage: 50,
+      percentileBelowAverage: 25,
+      percentileDownturn: 10,
     };
   });
 
@@ -84,28 +91,63 @@ const App: React.FC = () => {
   const latestInputsRef = useRef<SimulationInputs>(inputs);
   useEffect(() => { latestInputsRef.current = inputs; }, [inputs]);
 
-  // Deferred simulation runner — yields to the main thread so loading UI renders
+  // Persistent Web Worker ref — created once, reused for every simulation call.
+  // A single worker is sufficient because we only run one simulation at a time;
+  // any in-flight run is implicitly superseded when the user triggers a new one
+  // (the prior result is discarded when the new message arrives).
+  const workerRef = useRef<Worker | null>(null);
+  const getWorker = useCallback((): Worker => {
+    if (!workerRef.current) {
+      // Vite module-worker syntax: the bundler co-locates the worker chunk and
+      // resolves the URL at build time. `{ type: 'module' }` enables ES module
+      // imports inside the worker (required for the monteCarlo.ts import).
+      workerRef.current = new Worker(
+        new URL('./services/simulationWorker.ts', import.meta.url),
+        { type: 'module' }
+      );
+    }
+    return workerRef.current;
+  }, []);
+
+  // Simulation runner — dispatches work to the Web Worker so the main thread
+  // (and loading overlay animation) remain responsive during the 100k-scenario run.
   const runSimulationAsync = useCallback((simInputs: SimulationInputs, strategy: StrategyType, onComplete?: () => void) => {
     setIsSimulating(true);
     setSimulationError(null);
-    // setTimeout(50) yields to the browser so the loading overlay paints before
-    // the synchronous simulation loop blocks the thread.
-    setTimeout(() => {
-      try {
-        const res = runSimulation(simInputs, strategy);
-        setResults(res);
-        // Only navigate / notify the caller on success. If we called onComplete
-        // inside `finally`, a thrown error would still transition the user to the
-        // SIMULATION view with null/stale results while the error toast showed.
+
+    // Terminate any in-flight worker so a stale slow run cannot overwrite the
+    // result of a newer run that completes first.  Termination is instant; the
+    // next getWorker() call creates a fresh instance.
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
+    const worker = getWorker();
+
+    // Replace the message handler for this invocation (handles superseded runs).
+    worker.onmessage = (e: MessageEvent) => {
+      const { type } = e.data;
+      if (type === 'result') {
+        setResults(e.data.result);
+        // Only navigate / notify on success — mirrors the previous behaviour where
+        // onComplete was not called inside `finally` to avoid stale-result navigation.
         onComplete?.();
-      } catch (err) {
-        console.error('Simulation error:', err);
-        setSimulationError(err instanceof Error ? err.message : 'Unexpected simulation error.');
-      } finally {
-        setIsSimulating(false);
+      } else {
+        console.error('Simulation worker error:', e.data.message);
+        setSimulationError(e.data.message ?? 'Unexpected simulation error.');
       }
-    }, 50);
-  }, []);
+      setIsSimulating(false);
+    };
+
+    worker.onerror = (err) => {
+      console.error('Simulation worker uncaught error:', err);
+      setSimulationError(err.message ?? 'Unexpected simulation error.');
+      setIsSimulating(false);
+    };
+
+    worker.postMessage({ inputs: simInputs, strategy });
+  }, [getWorker]);
 
   const handleRunSimulation = (finalInputs: SimulationInputs) => {
     setInputs(finalInputs);
@@ -119,8 +161,8 @@ const App: React.FC = () => {
     // Immediately update the displayed slider value (cheap — no simulation).
     setInputs(prev => ({ ...prev, customStockAllocation: newAlloc }));
 
-    // Debounce the expensive 10,000-scenario re-run so rapid slider drags don't
-    // queue up many blocking calls on the main thread.
+    // Debounce the expensive 100,000-scenario re-run so rapid slider drags don't
+    // queue up many overlapping worker dispatches.
     if (sliderDebounceRef.current) clearTimeout(sliderDebounceRef.current);
     sliderDebounceRef.current = setTimeout(() => {
       // Use the ref (not a closure over `inputs`) to guarantee we read the

@@ -22,6 +22,13 @@ export interface SimulationInputs {
   birthYear: number;
   socialSecurityIncome: number; // Monthly estimate (e.g. 1200)
   socialSecurityAge: number;    // Age to start claiming
+
+  // --- Scenario Band Percentiles ---
+  // Define which Monte Carlo percentile each of the three chart lines represents.
+  // Defaults: 50 (median) / 25 (below-avg) / 10 (stress test).
+  percentileAverage: number;       // 1–99, shown as the green "Average Market" line
+  percentileBelowAverage: number;  // 1–99, shown as the gold "Below Average" line
+  percentileDownturn: number;      // 1–99, shown as the red "Downturn" line
 }
 
 export type StrategyType = 'BUCKET' | 'CONSERVATIVE' | 'AGGRESSIVE' | 'CUSTOM';
@@ -41,17 +48,27 @@ export interface AuditRow {
   startBond: number;
   stockReturn: number;
   bondReturn: number;
-  cashReturn: number; // New field for transparency
+  cashReturn: number;
+  /** Stochastic inflation realised this year (varies from user's mean due to random draw). */
+  realizedInflation: number;
   growthAmount: number;
   feesAmount: number;
+  /** Mechanical strategy action only — rebalance, bucket refill, etc. No G-K text. */
   action: string;
+  /** Isolated Guyton-Klinger guardrail event string; empty string when no trigger fired. */
+  gkEvent: string;
   withdrawal: number;
   taxPaid: number;
   endTotal: number;
   // --- CPA-grade additions ---
-  rmdAmount: number;        // IRS-mandated minimum distribution for this year (0 if not applicable)
-  nominalWithdrawal: number; // withdrawal expressed in nominal (future) dollars for 1099-R reference
-  ssIncome: number;         // Annual SS / pension income applied this year (0 before claiming age)
+  rmdAmount: number;         // IRS-mandated minimum distribution for this year (0 if not applicable)
+  /** Withdrawal in nominal (future) dollars using cumulative stochastic inflation — for 1099-R reference. */
+  nominalWithdrawal: number;
+  ssIncome: number;          // Annual SS / pension income applied this year (0 before claiming age)
+  /** Accumulated Guyton-Klinger spend-adjustment factor at end of this year (1.0 = no adjustment). */
+  spendMultiplier: number;
+  /** True when a jump-diffusion (Merton) crash event fired this year (2 % annual probability). */
+  crashed: boolean;
 }
 
 export interface SimulationResult {
