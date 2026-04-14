@@ -585,13 +585,13 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                     <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-0 z-10 shadow-sm transition-colors">
                       <tr>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Start Balance</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Real Returns</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Growth</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 w-1/4">Strategy Action</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Withdrawal</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Strategy Action</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Withdrawal (today's $)</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">End Balance</th>
                       </tr>
                     </thead>
@@ -616,6 +616,16 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                             {row.year}
                             {row.year - startYear > 0 && <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">({row.year - startYear} years away)</div>}
                           </td>
+                          {/* SS / Pension — now in column 2 so it's always visible without horizontal scrolling */}
+                          <td className="px-4 py-4 font-medium transition-colors">
+                            {row.ssIncome > 0 ? (
+                              <div className="text-emerald-600 dark:text-emerald-500 font-bold">
+                                +${row.ssIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            ) : (
+                              <div className="text-slate-300 dark:text-slate-600">—</div>
+                            )}
+                          </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 text-xs text-right md:text-left transition-colors">
                             <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                           </td>
@@ -639,15 +649,6 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                           <td className="px-4 py-4 text-xs font-medium text-slate-700 dark:text-slate-400 leading-relaxed transition-colors">
                             {row.action}
                           </td>
-                          <td className="px-4 py-4 font-medium transition-colors">
-                            {row.ssIncome > 0 ? (
-                              <div className="text-emerald-600 dark:text-emerald-500 font-bold">
-                                +${row.ssIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </div>
-                            ) : (
-                              <div className="text-slate-300 dark:text-slate-600">—</div>
-                            )}
-                          </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
                             {row.withdrawal - row.taxPaid < 0 ? (
                               <div className="text-emerald-600 dark:text-emerald-500 font-bold">
@@ -658,11 +659,22 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                                 Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </div>
                             )}
-                            {row.taxPaid > 0 && <div className="text-red-600 dark:text-red-400">Tax: -${row.taxPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>}
+                            {/* Always show Tax line — grey when $0, red when positive — so users can
+                                verify that the tax gross-up is being applied for all strategies. */}
+                            <div className={row.taxPaid > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'}>
+                              Tax: {row.taxPaid > 0 ? `-$${row.taxPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0'}
+                            </div>
                             <div className="font-bold border-t border-slate-200 dark:border-slate-700 mt-1 pt-1 text-slate-800 dark:text-slate-200">
                               Total Draw: {row.withdrawal < 0 ? '+' : '-'}${Math.abs(row.withdrawal).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
-                            
+                            {/* Nominal withdrawal — same amount in future (inflated) dollars — shows that
+                                inflation IS accounted for: the portfolio runs in real terms so a $30k
+                                spend in year 20 costs ~$54k in nominal dollars at 3% inflation. */}
+                            {inputs.inflationRate > 0 && (
+                              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                                Nominal: ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            )}
                             {row.rmdAmount > 0 && (
                               <div className="text-[9px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wide mt-1">
                                 RMD Evaluated
