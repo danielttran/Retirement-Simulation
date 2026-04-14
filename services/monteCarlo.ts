@@ -642,6 +642,11 @@ export const runSimulation = (
   // longer a single REAL_ASSUMPTIONS constant — it varies with every draw.
   const meanInflation = inflationRate / 100;
 
+  const dynamicAssumptions = {
+    ...NOMINAL_ASSUMPTIONS,
+    STOCK: { ...NOMINAL_ASSUMPTIONS.STOCK, mean: inputs.expectedStockReturn / 100 }
+  };
+
   const allRuns: SimulationRun[] = [];
   // Use Float64Array for column-based storage (Performance Optimization)
   const trajectoryColumns: Float64Array[] = Array(timeHorizon).fill(0).map(() => new Float64Array(NUM_SIMULATIONS));
@@ -759,7 +764,7 @@ export const runSimulation = (
       // generateAnnualReturns now takes nominal assumptions + mean inflation and
       // produces real returns with per-year stochastic inflation baked in.
       // The cash floor is handled inside the function.
-      const returns = generateAnnualReturns(NOMINAL_ASSUMPTIONS, meanInflation);
+      const returns = generateAnnualReturns(dynamicAssumptions, meanInflation);
       currentRunReturns.push(returns);
 
       const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });

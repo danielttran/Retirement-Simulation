@@ -110,7 +110,7 @@ Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(re
 
 --- SIMULATION MODEL (for your reference) ---
 Engine: 100,000-path Monte Carlo, log-normal returns, Cholesky correlation (Stock–Bond ρ=−0.15)
-Market Assumptions: Stock μ=8.5%/σ=17%, Bond μ=4.0%/σ=5%, Cash μ=2.5%/σ=1.5% (all nominal)
+Market Assumptions: Stock μ=${inputs.expectedStockReturn}%/σ=17%, Bond μ=4.0%/σ=5%, Cash μ=2.5%/σ=1.5% (all nominal)
 Stochastic Inflation: N(${inputs.inflationRate}%, 1.5%²) drawn per year; correlated −0.30 with equity draw
 Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawdown beyond log-normal
 Guyton-Klinger Guardrails: CWR > 120% of IWR → spending −10%; CWR < 80% of IWR → spending +10%

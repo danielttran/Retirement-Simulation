@@ -44,7 +44,11 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('simulationInputs');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.expectedStockReturn === undefined) {
+          parsed.expectedStockReturn = 8.5;
+        }
+        return parsed;
       } catch (e) {
         console.error('Failed to parse cached inputs:', e);
       }
@@ -55,6 +59,7 @@ const App: React.FC = () => {
       spendingPhases: [{ id: 1, startYear: 0, endYear: 30, annualSpend: 30000 }],
       timeHorizon: 40,
       inflationRate: 3.0,
+      expectedStockReturn: 8.5,
       managementFee: 0.10,
       customStockAllocation: 50,
       // CPA-grade defaults: typical pre-retiree profile

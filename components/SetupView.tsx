@@ -382,6 +382,8 @@ const SetupView: React.FC<SetupViewProps> = ({
 
     if (!isFinite(formState.inflationRate) || formState.inflationRate < 0 || formState.inflationRate > 15)
       errors.push('Inflation rate must be 0–15%.');
+    if (!isFinite(formState.expectedStockReturn) || formState.expectedStockReturn < 0 || formState.expectedStockReturn > 30)
+      errors.push('Expected stock return must be 0–30%.');
     if (!isFinite(formState.managementFee) || formState.managementFee < 0 || formState.managementFee > 5)
       errors.push('Management fee must be 0–5%.');
 
@@ -572,6 +574,16 @@ const SetupView: React.FC<SetupViewProps> = ({
                   onChange={(v) => updateField('inflationRate', v)}
                   suffix="%"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Expected Stock Return</label>
+                <CurrencyInput
+                  value={formState.expectedStockReturn}
+                  onChange={(v) => updateField('expectedStockReturn', v)}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Nominal historical average (default 8.5%).</p>
               </div>
 
               <div>

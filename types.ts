@@ -11,6 +11,7 @@ export interface SimulationInputs {
   spendingPhases: SpendingPhase[]; // replaces annualSpend; covers [0, timeHorizon) contiguously
   timeHorizon: number;
   inflationRate: number;
+  expectedStockReturn: number;
   managementFee: number;
   customStockAllocation: number; // 0 to 100
   // --- Tax & RMD (CPA-grade) ---
