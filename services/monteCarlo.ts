@@ -17,13 +17,9 @@ const TRANSACTION_COST = 0.0005; // 0.05% friction on selling/rebalancing
 
 // ---------------------------------------------------------------------------
 // RMD — IRS Uniform Lifetime Table (Publication 590-B, SECURE 2.0 / 2022+)
-// RMD threshold is age 73 (born 1951–1959) or 75 (born 1960+).
-// For simplicity we apply age 73 as the universal trigger; the UI can surface
-// the 73 vs. 75 distinction when a full birth-year field is added.
 // ---------------------------------------------------------------------------
-const RMD_AGE_THRESHOLD = 73;
 const RMD_FACTORS: Readonly<Record<number, number>> = {
-  73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9,
+  72: 27.4, 73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9,
   78: 22.0, 79: 21.1, 80: 20.2, 81: 19.4, 82: 18.5,
   83: 17.7, 84: 16.8, 85: 16.0, 86: 15.2, 87: 14.4,
   88: 13.7, 89: 12.9, 90: 12.2, 91: 11.5, 92: 10.8,
@@ -33,18 +29,16 @@ const RMD_FACTORS: Readonly<Record<number, number>> = {
 
 /**
  * Computes the IRS-required minimum distribution in real (today's) dollars.
- *
- * The simulation runs entirely in real terms, so the portfolio balance passed
- * in is already inflation-adjusted. Since real_balance = nominal / (1+π)^t
- * and RMD = nominal_balance / factor, the real RMD = real_balance / factor.
- *
- * @param realBalance  Total portfolio value in today's dollars.
- * @param age          Client's age in the simulation year being computed.
- * @param taxDeferredRatio  Fraction (0–100) of the portfolio in tax-deferred accounts.
- * @returns Real-dollar RMD (≥ 0).
  */
-function computeRMD(realBalance: number, age: number, taxDeferredRatio: number): number {
-  if (age < RMD_AGE_THRESHOLD || taxDeferredRatio <= 0) return 0;
+function computeRMD(realBalance: number, age: number, taxDeferredRatio: number, birthYear: number): number {
+  if (taxDeferredRatio <= 0) return 0;
+  
+  let threshold = 73; // Default SECURE 2.0
+  if (birthYear <= 1950) threshold = 72;
+  else if (birthYear >= 1960) threshold = 75;
+
+  if (age < threshold) return 0;
+
   const factor = RMD_FACTORS[Math.min(age, 100)] ?? 6.4; // cap factor at age-100 value
   return (realBalance * (taxDeferredRatio / 100)) / factor;
 }
@@ -188,7 +182,7 @@ const simulateYear = (
   let actionLog = "";
 
   // 4. Strategy Execution
-  if (totalAvailable <= 0.01) {
+  if (totalAvailable <= 0.01 && actualWithdrawal >= 0) {
     currStock = 0; currBond = 0; currCash = 0;
     actionLog = "Portfolio Depleted.";
   } else {
@@ -362,7 +356,7 @@ const generateAuditLog = (
     }
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
-    const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
+    const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
 
     // 2. Tax logic fix: The portfolio effectively only "loses" what the user consumes (baseSpend)
     // plus what the IRS consumes (taxOwed). Unspent RMD proceeds remain invested natively.
@@ -513,7 +507,7 @@ export const runSimulation = (
       }
 
       const totalPreWithdrawal = state.stock + state.bond + state.cash;
-      const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio);
+      const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
       // Blended effective tax rate: only the fraction held in tax-deferred accounts
       // is taxable on withdrawal. See generateAuditLog for the identical derivation.
       const taxRate = inputs.withdrawalTaxRate / 100;
