@@ -86,23 +86,23 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const aiPromptText = useMemo(() => {
     const auditRows = results.auditLogAverage;
     const auditSample = auditRows.slice(0, 10).map(r =>
-      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round(r.startCash + r.startStock + r.startBond).toLocaleString()} | Stock ${(r.stockReturn*100).toFixed(1)}% Bond ${(r.bondReturn*100).toFixed(1)}% Infl ${(r.realizedInflation*100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount).toLocaleString()} | Fees -$${Math.round(r.feesAmount).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal).toLocaleString()} (Tax -$${Math.round(r.taxPaid).toLocaleString()}) | SS +$${Math.round(r.ssIncome).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount).toLocaleString()} | End $${Math.round(r.endTotal).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
+      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round((r.startCash ?? 0) + (r.startStock ?? 0) + (r.startBond ?? 0)).toLocaleString()} | Stock ${((r.stockReturn ?? 0)*100).toFixed(1)}% Bond ${((r.bondReturn ?? 0)*100).toFixed(1)}% Infl ${((r.realizedInflation ?? 0)*100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount ?? 0).toLocaleString()} | Fees -$${Math.round(r.feesAmount ?? 0).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal ?? 0).toLocaleString()} (Tax -$${Math.round(r.taxPaid ?? 0).toLocaleString()}) | SS +$${Math.round(r.ssIncome ?? 0).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount ?? 0).toLocaleString()} | End $${Math.round(r.endTotal ?? 0).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
     ).join('\n');
 
     return `Retirement Simulation Validation Request
 Please evaluate the mathematical correctness, IRS compliance, and financial risk of the following retirement plan.
 
 --- INPUTS ---
-Portfolio: $${(inputs.initialCash + inputs.initialInvestments).toLocaleString()} (Cash: $${inputs.initialCash.toLocaleString()}, Investments: $${inputs.initialInvestments.toLocaleString()})
+Portfolio: $${((inputs.initialCash ?? 0) + (inputs.initialInvestments ?? 0)).toLocaleString()} (Cash: $${(inputs.initialCash ?? 0).toLocaleString()}, Investments: $${(inputs.initialInvestments ?? 0).toLocaleString()})
 Start Year: ${startYear}  |  Time Horizon: ${inputs.timeHorizon} years
 Inflation Rate (mean): ${inputs.inflationRate}%
 Management Fee: ${inputs.managementFee}%
 Retirement Age: ${inputs.currentAge} years  |  Birth Year: ${inputs.birthYear}
 Tax-Deferred Ratio: ${inputs.taxDeferredRatio}%  |  Withdrawal Tax Rate: ${inputs.withdrawalTaxRate}%
-Social Security: $${inputs.socialSecurityIncome.toLocaleString()}/mo starting at age ${inputs.socialSecurityAge}
+Social Security: $${(inputs.socialSecurityIncome ?? 0).toLocaleString()}/mo starting at age ${inputs.socialSecurityAge}
 
 --- SPENDING PHASES ---
-${inputs.spendingPhases.map(p => `  Year ${p.startYear + 1}–${p.endYear}: $${p.annualSpend.toLocaleString()}/yr (in today's dollars)`).join('\n')}
+${inputs.spendingPhases.map(p => `  Year ${p.startYear + 1}–${p.endYear}: $${(p.annualSpend ?? 0).toLocaleString()}/yr (in today's dollars)`).join('\n')}
 
 --- STRATEGY ---
 Selected Strategy: ${selectedStrategy}
@@ -343,7 +343,7 @@ ${auditSample}
             <div className="flex flex-col">
               <span className="text-[11px] uppercase font-semibold text-slate-400 dark:text-slate-500 tracking-wider">Initial Annual Spend</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                ${inputs.spendingPhases[0].annualSpend.toLocaleString()}
+                {inputs.spendingPhases[0]?.annualSpend?.toLocaleString() ?? '—'}
                 {inputs.spendingPhases.length > 1 && (
                   <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 ml-1">
                     +{inputs.spendingPhases.length - 1} tier{inputs.spendingPhases.length > 2 ? 's' : ''}

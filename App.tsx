@@ -41,22 +41,10 @@ const App: React.FC = () => {
 
   // Default inputs, with localStorage hydration
   const [inputs, setInputs] = useState<SimulationInputs>(() => {
-    const saved = localStorage.getItem('simulationInputs');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.expectedStockReturn === undefined) {
-          parsed.expectedStockReturn = 8.5;
-        }
-        return parsed;
-      } catch (e) {
-        console.error('Failed to parse cached inputs:', e);
-      }
-    }
-    return {
+    const defaults: SimulationInputs = {
       initialCash: 10000,
       initialInvestments: 400000,
-      spendingPhases: [{ id: 1, startYear: 0, endYear: 30, annualSpend: 30000 }],
+      spendingPhases: [{ id: 1, startYear: 0, endYear: 40, annualSpend: 30000 }],
       timeHorizon: 40,
       inflationRate: 3.0,
       expectedStockReturn: 8.5,
@@ -74,6 +62,19 @@ const App: React.FC = () => {
       percentileBelowAverage: 25,
       percentileDownturn: 10,
     };
+
+    const saved = localStorage.getItem('simulationInputs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Merge with defaults so that any newly added fields (CPA/Tax/SS) are 
+        // present even if the user has an old cache from a previous version.
+        return { ...defaults, ...parsed };
+      } catch (e) {
+        console.error('Failed to parse cached inputs:', e);
+      }
+    }
+    return defaults;
   });
 
   // Update cache whenever inputs change

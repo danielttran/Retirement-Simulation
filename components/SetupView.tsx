@@ -26,7 +26,7 @@ const CurrencyInput = ({
   // Sync with prop value on mount or external update
   useEffect(() => {
     if (!isFocused) {
-      setDisplayStr(value.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      setDisplayStr((value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 }));
     }
   }, [value, isFocused]);
 
@@ -183,7 +183,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
               key={phase.id}
               style={{ width: `${widthPct}%`, backgroundColor: PHASE_COLORS[i % PHASE_COLORS.length] }}
               className="h-full transition-all duration-300"
-              title={`Year ${phase.startYear + 1}–${phase.endYear}: $${phase.annualSpend.toLocaleString()}`}
+              title={`Year ${phase.startYear + 1}–${phase.endYear}: $${(phase.annualSpend ?? 0).toLocaleString()}`}
             />
           );
         })}
@@ -279,7 +279,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
               <div className="px-3 py-2.5 flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">
                   Year {phase.startYear + 1}–{phase.endYear}:{' '}
-                  <span className="text-slate-900 dark:text-slate-100">${phase.annualSpend.toLocaleString()}</span>
+                  <span className="text-slate-900 dark:text-slate-100">${(phase.annualSpend ?? 0).toLocaleString()}</span>
                   <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500 ml-1">USD/yr</span>
                 </span>
                 <div className="flex items-center gap-1">
