@@ -332,7 +332,7 @@ ${auditSample}
       </nav>
 
       {/* Sub-header Inputs Summary */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-300">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-300 sticky top-20 z-40">
         <div className="max-w-[1440px] mx-auto px-6 md:px-10 py-4 flex items-center justify-between overflow-x-auto gap-8 no-scrollbar">
           <div className="flex items-center gap-10 shrink-0">
             <div className="flex flex-col">
@@ -781,11 +781,11 @@ ${auditSample}
                 </div>
               )}
 
-              <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
+              <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-sm text-left relative">
                   {auditMode ? (
                     // AUDIT TABLE HEADERS
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-0 z-10 shadow-sm transition-colors">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-[152px] z-10 shadow-sm transition-colors">
                       <tr>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year / Age</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
@@ -809,7 +809,7 @@ ${auditSample}
                     </thead>
                   ) : (
                     // NORMAL TABLE HEADERS
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-0 z-10 shadow-sm transition-colors">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-[152px] z-10 shadow-sm transition-colors">
                       <tr>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80">Year</th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500">
