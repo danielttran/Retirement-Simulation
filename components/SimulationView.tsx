@@ -785,42 +785,42 @@ ${auditSample}
                 <table className="w-full text-sm text-left relative">
                   {auditMode ? (
                     // AUDIT TABLE HEADERS
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-[152px] z-10 shadow-sm transition-colors">
+                    <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider transition-colors">
                       <tr>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year / Age</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Start Balance</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">Year / Age</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500 sticky top-0 z-20 shadow-sm">SS / Pension</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">Start Balance</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">
                           Real Returns
                           <div className="text-[9px] text-purple-500 dark:text-purple-400 normal-case font-normal tracking-normal mt-0.5">incl. actual inflation check</div>
                         </th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Growth</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">Growth</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500 sticky top-0 z-20 shadow-sm">Fees</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">
                           Guardrail &amp; Strategy Action
                           <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Automatic spending adjustments + rebalancing actions</div>
                         </th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">
                           Withdrawal (today's $)
                           <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">incl. nominal for 1099-R</div>
                         </th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">End Balance</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 sticky top-0 z-20 shadow-sm">End Balance</th>
                       </tr>
                     </thead>
                   ) : (
                     // NORMAL TABLE HEADERS
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-[152px] z-10 shadow-sm transition-colors">
+                    <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider transition-colors">
                       <tr>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80">Year</th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500">
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 sticky top-0 z-20 shadow-sm transition-colors">Year</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500 sticky top-0 z-20 shadow-sm transition-colors">
                           Most Likely
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileAverage} of 100k runs</div>
                         </th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-below-avg-gold dark:text-amber-500">
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-below-avg-gold dark:text-amber-500 sticky top-0 z-20 shadow-sm transition-colors">
                           Conservative
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileBelowAverage} of 100k runs</div>
                         </th>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-downturn-red dark:text-red-500">
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-downturn-red dark:text-red-500 sticky top-0 z-20 shadow-sm transition-colors">
                           Downturn
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileDownturn} of 100k runs</div>
                         </th>
