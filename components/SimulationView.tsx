@@ -771,6 +771,15 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                             <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                           </td>
                           <td className="px-4 py-4 text-xs font-medium">
+                            {/* Jump-diffusion crash flag — annotates years where the 2 % annual
+                                black-swan event fired (Merton 1976), producing the extra-large
+                                equity drawdown beyond normal log-normal variance. */}
+                            {row.crashed && (
+                              <div className="mb-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 flex items-center gap-1 uppercase tracking-wide">
+                                <span className="material-symbols-outlined text-xs leading-none">bolt</span>
+                                Crash Event
+                              </div>
+                            )}
                             <div className={`${row.stockReturn >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                               Stock: {(row.stockReturn * 100).toFixed(1)}%
                             </div>
@@ -845,8 +854,9 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                               Nominal (1099-R): ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
                             {row.rmdAmount > 0 && (
-                              <div className="mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 inline-block uppercase tracking-wide">
-                                RMD ≥ ${row.rmdAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              <div className="mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 inline-flex items-center gap-1 uppercase tracking-wide">
+                                <span className="material-symbols-outlined text-xs leading-none">verified</span>
+                                RMD: ${row.rmdAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} (met)
                               </div>
                             )}
                           </td>
@@ -903,12 +913,51 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Typical annual swing in portfolio value based on this strategy.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
-                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Starting Safe Withdrawal</span>
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Initial Spend Rate</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{((inputs.spendingPhases[0].annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Initial Rate</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Recommended safe rate is typically 3.5% - 4.0%.</p>
+                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Pre-tax, before SS &amp; G-K adjustments</span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Nominal annual spend ÷ total portfolio. Actual rate adjusts via Guyton-Klinger guardrails. Benchmark: 3.5–4.0%.</p>
               </div>
             </div>
+
+            {/* Model Assumptions Disclosure — for CPA / IRS reviewer transparency.
+                All parameters listed here are fixed research-based constants baked
+                into the Monte Carlo engine. They are NOT user-configurable inputs. */}
+            <details className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <summary className="px-6 py-4 cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none hover:text-slate-700 dark:hover:text-slate-200 transition-colors list-none">
+                <span className="material-symbols-outlined text-sm leading-none">info</span>
+                Model Assumptions (Fixed — For CPA / IRS Review)
+                <span className="material-symbols-outlined text-sm leading-none ml-auto">expand_more</span>
+              </summary>
+              <div className="px-6 pb-5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3 leading-relaxed">
+                  The following parameters are calibrated from peer-reviewed financial research and IRS publications.
+                  They are not exposed as user inputs to prevent inappropriate miscalibration.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-3 text-xs">
+                  {([
+                    { label: 'Inflation Volatility', value: '1.5% std dev', note: 'Annual σ around user\'s mean rate' },
+                    { label: 'Equity–Inflation Correlation', value: '−0.30', note: 'Fisher-effect: crash years → lower inflation' },
+                    { label: 'Market Crash Probability', value: '2% / year', note: 'Merton (1976) jump-diffusion; ~55% chance over 40 yrs' },
+                    { label: 'Crash Severity', value: '20–40% drawdown', note: 'Uniform draw; multiplicative on equity return' },
+                    { label: 'G-K Upper Guardrail', value: '>120% IWR → −10% spend', note: 'Capital Preservation Rule (Guyton-Klinger 2006)' },
+                    { label: 'G-K Lower Guardrail', value: '<80% IWR → +10% spend', note: 'Prosperity Rule (Guyton-Klinger 2006)' },
+                    { label: 'Drift-Band Width', value: '±5% equity ratio', note: 'Full rebalance only outside band; reduces friction' },
+                    { label: 'Transaction Cost', value: '0.05% per trade', note: 'Applied to all liquidation / rebalancing events' },
+                    { label: 'RMD Table', value: 'IRS Uniform Lifetime', note: 'Pub 590-B, SECURE 2.0; thresholds: 72 / 73 / 75' },
+                    { label: 'Simulations Run', value: '100,000', note: 'Monte Carlo; column-major Float64Array storage' },
+                    { label: 'All Values', value: 'Real (Today\'s $)', note: 'Inflation-adjusted throughout; nominal shown for 1099-R' },
+                    { label: 'Stock Model', value: 'Log-normal + Jump', note: 'µ=8.5%, σ=17% nominal; Merton crash overlay' },
+                  ] as { label: string; value: string; note: string }[]).map(({ label, value, note }) => (
+                    <div key={label} className="flex flex-col gap-0.5">
+                      <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{label}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-200">{value}</span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight">{note}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </main >

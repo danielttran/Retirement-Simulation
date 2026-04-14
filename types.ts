@@ -60,6 +60,8 @@ export interface AuditRow {
   ssIncome: number;          // Annual SS / pension income applied this year (0 before claiming age)
   /** Accumulated Guyton-Klinger spend-adjustment factor at end of this year (1.0 = no adjustment). */
   spendMultiplier: number;
+  /** True when a jump-diffusion (Merton) crash event fired this year (2 % annual probability). */
+  crashed: boolean;
 }
 
 export interface SimulationResult {

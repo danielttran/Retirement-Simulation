@@ -165,7 +165,7 @@ function generateAnnualReturns(
   nominalAssumptions: typeof NOMINAL_ASSUMPTIONS,
   meanInflation: number,
   inflationStdDev = 0.015
-): { stock: number; bond: number; cash: number; inflation: number } {
+): { stock: number; bond: number; cash: number; inflation: number; crashed: boolean } {
 
   // --- Step 1: Four independent standard-normal draws ---
   const Z = [randn_bm(), randn_bm(), randn_bm()];
@@ -229,14 +229,17 @@ function generateAnnualReturns(
   // --- Step 7: Jump Diffusion — fat-tail equity shock ---
   // 2 % annual probability of a black-swan crash; magnitude drawn U[20 %, 40 %].
   // Applied multiplicatively: (1 + r_ln)(1 − shock) − 1
+  let crashed = false;
   if (Math.random() < 0.02) {
     const shock = 0.20 + Math.random() * 0.20; // uniform in [0.20, 0.40]
     stockReturn = (1 + stockReturn) * (1 - shock) - 1;
+    crashed = true;
   }
 
   // Return the realised inflation alongside asset returns so callers can
   // accumulate a precise cumulative inflation factor for nominal-dollar reporting.
-  return { stock: stockReturn, bond: bondReturn, cash: cashReturn, inflation: annualInflation };
+  // `crashed` flags jump-diffusion years so the audit table can annotate them.
+  return { stock: stockReturn, bond: bondReturn, cash: cashReturn, inflation: annualInflation, crashed };
 }
 
 // 3. SIMULATION LOGIC
@@ -531,18 +534,25 @@ const generateAuditLog = (
     // the pre-guardrail amount.  (Prior order over-taxed Capital Preservation years.)
     baseSpend *= state.spendMultiplier;
 
-    // 2. Tax gross-up on the G-K-adjusted baseSpend.
-    let taxOwed = 0;
-    if (baseSpend > 0) {
-      const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
-      const taxFromNeeds   = grossBaseSpend - baseSpend;
-      const taxFromRMD     = rmdAmount * taxRate;
-      taxOwed = Math.max(taxFromNeeds, taxFromRMD);
-    } else {
-      taxOwed = rmdAmount * taxRate; // SS/pension fully funds spending; RMD still taxable
-    }
+    // 2. RMD-aware gross-up: IRS Pub 590-B requires the full rmdAmount to leave the
+    //    tax-deferred account regardless of spending need.  When the RMD exceeds the
+    //    grossed-up spending withdrawal it becomes the portfolio withdrawal floor, and
+    //    tax is computed on that larger distribution — not just the spending portion.
+    const grossBaseSpend = baseSpend > 0 && effTaxRate > 0 && effTaxRate < 1
+      ? baseSpend / (1 - effTaxRate)
+      : Math.max(0, baseSpend);
 
-    state.spend = baseSpend + taxOwed;
+    let taxOwed: number;
+    if (rmdAmount > grossBaseSpend) {
+      // RMD forces a larger distribution than the spending need.
+      // Tax is withheld from the RMD distribution itself.
+      state.spend = rmdAmount;
+      taxOwed     = rmdAmount * taxRate;
+    } else {
+      // Spending need exceeds RMD — normal tax gross-up path.
+      state.spend = grossBaseSpend;
+      taxOwed     = grossBaseSpend - Math.max(0, baseSpend);
+    }
 
     // --- Guyton-Klinger Guardrail Check ---
     // CWR uses totalPreWithdrawal (already computed above) — no duplicate calculation.
@@ -598,6 +608,7 @@ const generateAuditLog = (
       nominalWithdrawal,
       ssIncome:          ssIncomeThisYear,
       spendMultiplier:   state.spendMultiplier, // current accumulated G-K factor this year
+      crashed:           returns.crashed,        // jump-diffusion flag for audit annotation
     });
 
     state = outcome.nextState;
@@ -708,17 +719,19 @@ export const runSimulation = (
       // Apply G-K multiplier BEFORE tax so gross-up is on the adjusted spend amount.
       baseSpend *= state.spendMultiplier;
 
-      let taxOwed = 0;
-      if (baseSpend > 0) {
-        const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
-        const taxFromNeeds = grossBaseSpend - baseSpend;
-        const taxFromRMD = rmdThisYear * taxRate;
-        taxOwed = Math.max(taxFromNeeds, taxFromRMD);
-      } else {
-        taxOwed = rmdThisYear * taxRate;
-      }
+      // Mirrors generateAuditLog: RMD is a hard floor on the portfolio withdrawal.
+      const grossBaseSpend = baseSpend > 0 && effTaxRate > 0 && effTaxRate < 1
+        ? baseSpend / (1 - effTaxRate)
+        : Math.max(0, baseSpend);
 
-      state.spend = baseSpend + taxOwed;
+      let taxOwed: number;
+      if (rmdThisYear > grossBaseSpend) {
+        state.spend = rmdThisYear;
+        taxOwed     = rmdThisYear * taxRate;
+      } else {
+        state.spend = grossBaseSpend;
+        taxOwed     = grossBaseSpend - Math.max(0, baseSpend);
+      }
 
       // --- Guyton-Klinger Guardrail Check ---
       // totalPreWithdrawal is already computed above for the RMD calculation.
