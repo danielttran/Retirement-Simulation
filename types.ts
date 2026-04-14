@@ -51,6 +51,7 @@ export interface AuditRow {
   // --- CPA-grade additions ---
   rmdAmount: number;        // IRS-mandated minimum distribution for this year (0 if not applicable)
   nominalWithdrawal: number; // withdrawal expressed in nominal (future) dollars for 1099-R reference
+  ssIncome: number;         // Annual SS / pension income applied this year (0 before claiming age)
 }
 
 export interface SimulationResult {

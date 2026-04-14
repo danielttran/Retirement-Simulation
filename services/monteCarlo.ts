@@ -5,6 +5,9 @@ import { SimulationInputs, SimulationResult, StrategyType, YearResult, AuditRow,
  * Phases are contiguous and cover [0, timeHorizon) — the last matching phase wins.
  */
 export function getSpendingForYear(year: number, phases: SpendingPhase[]): number {
+  // Guard: UI always provides at least one phase, but defend against empty array
+  // to prevent a runtime crash on `phases[0]` in the fallback path.
+  if (phases.length === 0) return 0;
   for (let i = phases.length - 1; i >= 0; i--) {
     if (year >= phases[i].startYear) return phases[i].annualSpend;
   }
@@ -41,6 +44,47 @@ function computeRMD(realBalance: number, age: number, taxDeferredRatio: number, 
 
   const factor = RMD_FACTORS[Math.min(age, 100)] ?? 6.4; // cap factor at age-100 value
   return (realBalance * (taxDeferredRatio / 100)) / factor;
+}
+
+/**
+ * Computes the grossed-up portfolio withdrawal needed in the first retirement year,
+ * accounting for Social Security income and tax on tax-deferred withdrawals.
+ *
+ * Used to correctly size the BUCKET strategy's initial cash buffer so it exactly
+ * matches what simulateYear will target in year 1 — preventing spurious stock
+ * sells (when the buffer is too small) or excess idle cash (when too large).
+ *
+ * portfolioBalance is used to compute the year-1 RMD; passing totalStartPortfolio
+ * is correct because the RMD is based on the Dec-31 prior-year balance (= the
+ * initial state before any simulation-year-1 returns are applied).
+ */
+function computeFirstYearGrossedUpSpend(
+  rawSpend: number,
+  portfolioBalance: number,
+  inputs: SimulationInputs
+): number {
+  const ageAtYear1 = inputs.currentAge + 1;
+  let baseSpend = rawSpend;
+
+  if (ageAtYear1 >= inputs.socialSecurityAge) {
+    baseSpend -= inputs.socialSecurityIncome * 12;
+  }
+
+  const taxRate = inputs.withdrawalTaxRate / 100;
+  const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
+  const rmdAmount = computeRMD(portfolioBalance, ageAtYear1, inputs.taxDeferredRatio, inputs.birthYear);
+
+  let taxOwed = 0;
+  if (baseSpend > 0) {
+    const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
+    const taxFromNeeds = grossBaseSpend - baseSpend;
+    const taxFromRMD = rmdAmount * taxRate;
+    taxOwed = Math.max(taxFromNeeds, taxFromRMD);
+  } else {
+    taxOwed = rmdAmount * taxRate;
+  }
+
+  return baseSpend + taxOwed;
 }
 
 // Nominal Return Assumptions (Long-term historical averages)
@@ -99,8 +143,20 @@ function generateAnnualReturns(realAssumptions: typeof NOMINAL_ASSUMPTIONS) {
   ];
 
   const getLogParams = (arithMean: number, arithStd: number) => {
-    // CLAMPING FIX: Ensure term is positive to avoid NaN on high inflation
-    const term = Math.max(1 + arithMean, 0.0001);
+    // Convert arithmetic mean (μ) and std dev (σ) to lognormal parameters
+    // for the gross-return factor X = 1 + R, where E[X] = 1 + arithMean.
+    //
+    // Standard moment-matching derivation (X ~ LogNormal(μ_log, σ_log)):
+    //   E[X]   = exp(μ_log + σ_log²/2) = μ  →  μ_log = log(μ) - σ_log²/2
+    //   Var[X] = (exp(σ_log²) − 1)·μ²  = σ²  →  σ_log = sqrt(log(1 + σ²/μ²))
+    //
+    // Written compactly via φ = sqrt(σ² + μ²):
+    //   σ_log = sqrt(log(φ²/μ²))     [equivalent to sqrt(log(1 + σ²/μ²))]
+    //   μ_log = log(μ²/φ)            [equivalent to log(μ) − σ_log²/2]
+    //
+    // Clamp μ (= term = 1 + arithMean) > 0 to avoid NaN in high-inflation
+    // regimes where the real return mean could fall to −1 or below.
+    const term = Math.max(1 + arithMean, 0.0001); // μ = gross-return factor
     const phi = Math.sqrt((arithStd * arithStd) + (term * term));
     const mu_log = Math.log(term * term / phi);
     const sigma_log = Math.sqrt(Math.log(phi * phi / (term * term)));
@@ -288,7 +344,8 @@ const simulateYear = (
 const generateAuditLog = (
   inputs: SimulationInputs,
   strategy: StrategyType,
-  annualReturns: { stock: number, bond: number, cash: number }[]
+  annualReturns: { stock: number, bond: number, cash: number }[],
+  startYear: number   // same value captured by runSimulation for chart year labels
 ): AuditRow[] => {
   const log: AuditRow[] = [];
   const { initialCash, initialInvestments, spendingPhases, customStockAllocation } = inputs;
@@ -306,8 +363,10 @@ const generateAuditLog = (
   };
 
   if (strategy === 'BUCKET') {
-    // (mirror of runSimulation initial state).
-    const targetCashBuffer = 2 * initialSpend;
+    // Mirror of runSimulation initial state — use grossed-up spend so the
+    // initial cash buffer matches what simulateYear targets in year 1.
+    const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
+    const targetCashBuffer = 2 * Math.max(grossedUpInitialSpend, 0);
     if (initialCash >= targetCashBuffer) {
       state.cash = targetCashBuffer;
       state.stock = totalStartPortfolio - targetCashBuffer;
@@ -349,10 +408,16 @@ const generateAuditLog = (
     // --- RMD & Tax Gross-Up ---
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
     const ageThisYear = inputs.currentAge + year;
-    
+
+    // Capture SS/pension income before deducting it from baseSpend so we can
+    // report the offset explicitly in the audit row (ssIncome column).
+    const ssIncomeThisYear = ageThisYear >= inputs.socialSecurityAge
+      ? inputs.socialSecurityIncome * 12
+      : 0;
+
     // Supplemental Income offsets need for portfolio withdrawals
-    if (ageThisYear >= inputs.socialSecurityAge) {
-      baseSpend -= inputs.socialSecurityIncome * 12;
+    if (ssIncomeThisYear > 0) {
+      baseSpend -= ssIncomeThisYear;
     }
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
@@ -390,7 +455,7 @@ const generateAuditLog = (
     const nominalWithdrawal = outcome.withdrawal * inflationFactor;
 
     log.push({
-      year: new Date().getFullYear() + year,
+      year: startYear + year,
       startCash,
       startStock,
       startBond,
@@ -405,6 +470,7 @@ const generateAuditLog = (
       endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
       rmdAmount,
       nominalWithdrawal,
+      ssIncome: ssIncomeThisYear,
     });
 
     state = outcome.nextState;
@@ -455,8 +521,12 @@ export const runSimulation = (
     };
 
     if (strategy === 'BUCKET') {
-      // converting investments → cash to fund the cash bucket incurs selling cost.
-      const targetCashBuffer = 2 * initialSpend;
+      // The cash buffer must cover 2 × grossed-up spend so it matches exactly
+      // what simulateYear targets in year 1 (after tax and SS adjustments).
+      // Using raw spend here would leave the buffer short by the tax gross-up
+      // amount, triggering spurious stock sells in the first simulation year.
+      const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
+      const targetCashBuffer = 2 * Math.max(grossedUpInitialSpend, 0);
       if (initialCash >= targetCashBuffer) {
         // Already have enough cash; invest the surplus into stocks (buying — no cost).
         state.cash = targetCashBuffer;
@@ -553,9 +623,10 @@ export const runSimulation = (
     if (finalVal <= 1) failures++;
 
     let variance = 0;
-    if (runPortfolioReturns.length > 0) {
+    if (runPortfolioReturns.length > 1) {
       const meanR = runPortfolioReturns.reduce((a, b) => a + b, 0) / runPortfolioReturns.length;
-      variance = runPortfolioReturns.reduce((sq, n) => sq + Math.pow(n - meanR, 2), 0) / runPortfolioReturns.length;
+      // Bessel's correction (N-1) gives an unbiased sample variance estimate.
+      variance = runPortfolioReturns.reduce((sq, n) => sq + Math.pow(n - meanR, 2), 0) / (runPortfolioReturns.length - 1);
     }
     totalAnnualizedVol += Math.sqrt(variance);
 
@@ -585,9 +656,13 @@ export const runSimulation = (
   // not corrupt the row-major `allRuns[j].trajectory` arrays used by findBestFitRun.
   for (let i = 0; i < timeHorizon; i++) {
     const yearValues = trajectoryColumns[i].sort();
-    downturnCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.10)]);
-    belowAverageCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.25)]);
-    averageCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.50)]);
+    // Nearest-rank percentile: index = ceil(N × p) − 1 (0-based).
+    // Math.floor(N × p) gives index 1000 for p=0.10, N=10000 — that is the
+    // 1001st value (10.01th percentile).  Subtracting 1 from the ceiling
+    // gives index 999 — exactly the 1000th value (10.00th percentile).
+    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.10) - 1]);
+    belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.25) - 1]);
+    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.50) - 1]);
   }
 
   const chartData: YearResult[] = averageCurve.map((val, idx) => ({
@@ -613,7 +688,12 @@ export const runSimulation = (
       const run = allRuns[i];
       let dist = 0;
       for (let y = 0; y < timeHorizon; y++) {
-        const diff = run.trajectory[y] - targetCurve[y];
+        // Normalize each year's squared error by the target value (+1 guards
+        // against division-by-zero at depletion). Without normalization the
+        // absolute-dollar scale of late years would dominate the metric,
+        // making the selected run match the end well but diverge early on.
+        const denom = Math.abs(targetCurve[y]) + 1;
+        const diff = (run.trajectory[y] - targetCurve[y]) / denom;
         dist += diff * diff;
       }
       if (dist < bestDist) {
@@ -628,9 +708,11 @@ export const runSimulation = (
   const belowAvgRun = findBestFitRun(belowAverageCurve);
   const downturnRun = findBestFitRun(downturnCurve);
 
-  const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns);
-  const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns);
-  const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns);
+  // Pass the same `currentYear` used for chart labels so audit rows and chart
+  // x-axis are guaranteed to show identical year values (no separate Date() call).
+  const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns, currentYear);
+  const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns, currentYear);
+  const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns, currentYear);
 
   const finalMedian = medianRun.finalBalance;
   const avgVol = (totalAnnualizedVol / NUM_SIMULATIONS) * 100;
@@ -640,16 +722,11 @@ export const runSimulation = (
   let dispBond = targetBondWeight;
   let dispCash = 0;
   if (strategy === 'BUCKET') {
-    // The simulation targets `2 × state.spend` as its steady-state cash buffer,
-    // where `state.spend` is already grossed-up for taxes (see year-loop above).
-    // Apply the same effective-tax-rate formula here so the sidebar allocation
-    // percentage reflects what the engine actually maintains, not the raw spend.
+    // Use the same grossed-up initial spend as the simulation initialization so
+    // the displayed allocation exactly matches what the engine sets up on day one.
     const rawInitialSpend = getSpendingForYear(0, spendingPhases);
-    const effectiveTaxRateDisp = (inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100);
-    const grossedUpInitialSpend = effectiveTaxRateDisp > 0
-      ? rawInitialSpend / (1 - effectiveTaxRateDisp)
-      : rawInitialSpend;
-    const startCash = Math.min(totalStartPortfolio, 2 * grossedUpInitialSpend);
+    const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(rawInitialSpend, totalStartPortfolio, inputs);
+    const startCash = Math.min(totalStartPortfolio, 2 * Math.max(grossedUpInitialSpend, 0));
     dispCash = startCash / totalStartPortfolio;
     dispStock = 1.0 - dispCash;
     dispBond = 0;
