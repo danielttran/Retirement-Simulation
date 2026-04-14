@@ -148,8 +148,14 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   };
 
   const handleDownloadCSV = () => {
+    // Honour the view-duration filter so the exported data matches what is
+    // shown on screen (e.g. if user chose "10 Years", CSV has 10 years too).
+    const dataToExport = viewDuration === 'MAX'
+      ? results.data
+      : results.data.filter(d => d.year <= startYear + viewDuration);
+
     const headers = ['Year', 'Average Market', 'Below Average', 'Significant Downturn'];
-    const rows = results.data.map(d => [
+    const rows = dataToExport.map(d => [
       d.year,
       d.average != null ? d.average.toFixed(2) : '0.00',
       d.belowAverage != null ? d.belowAverage.toFixed(2) : '0.00',

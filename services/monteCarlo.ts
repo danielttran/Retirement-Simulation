@@ -5,6 +5,9 @@ import { SimulationInputs, SimulationResult, StrategyType, YearResult, AuditRow,
  * Phases are contiguous and cover [0, timeHorizon) — the last matching phase wins.
  */
 export function getSpendingForYear(year: number, phases: SpendingPhase[]): number {
+  // Guard: UI always provides at least one phase, but defend against empty array
+  // to prevent a runtime crash on `phases[0]` in the fallback path.
+  if (phases.length === 0) return 0;
   for (let i = phases.length - 1; i >= 0; i--) {
     if (year >= phases[i].startYear) return phases[i].annualSpend;
   }
@@ -341,7 +344,8 @@ const simulateYear = (
 const generateAuditLog = (
   inputs: SimulationInputs,
   strategy: StrategyType,
-  annualReturns: { stock: number, bond: number, cash: number }[]
+  annualReturns: { stock: number, bond: number, cash: number }[],
+  startYear: number   // same value captured by runSimulation for chart year labels
 ): AuditRow[] => {
   const log: AuditRow[] = [];
   const { initialCash, initialInvestments, spendingPhases, customStockAllocation } = inputs;
@@ -451,7 +455,7 @@ const generateAuditLog = (
     const nominalWithdrawal = outcome.withdrawal * inflationFactor;
 
     log.push({
-      year: new Date().getFullYear() + year,
+      year: startYear + year,
       startCash,
       startStock,
       startBond,
@@ -700,9 +704,11 @@ export const runSimulation = (
   const belowAvgRun = findBestFitRun(belowAverageCurve);
   const downturnRun = findBestFitRun(downturnCurve);
 
-  const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns);
-  const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns);
-  const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns);
+  // Pass the same `currentYear` used for chart labels so audit rows and chart
+  // x-axis are guaranteed to show identical year values (no separate Date() call).
+  const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns, currentYear);
+  const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns, currentYear);
+  const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns, currentYear);
 
   const finalMedian = medianRun.finalBalance;
   const avgVol = (totalAnnualizedVol / NUM_SIMULATIONS) * 100;

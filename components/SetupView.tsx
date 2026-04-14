@@ -388,6 +388,15 @@ const SetupView: React.FC<SetupViewProps> = ({
     // --- CPA / Tax field validation ---
     if (formState.currentAge < 25 || formState.currentAge > 85)
       errors.push('Retirement age must be between 25 and 85.');
+
+    // Birth year: plausible range AND consistent with retirement age.
+    // Allow ±1 year because the birthday may not have occurred yet this calendar year.
+    const thisYear = new Date().getFullYear();
+    if (formState.birthYear < 1900 || formState.birthYear > thisYear)
+      errors.push('Birth year must be between 1900 and the current year.');
+    else if (Math.abs(formState.birthYear - (thisYear - formState.currentAge)) > 1)
+      errors.push(`Birth year ${formState.birthYear} does not match retirement age ${formState.currentAge} (expected ~${thisYear - formState.currentAge}).`);
+
     if (formState.taxDeferredRatio < 0 || formState.taxDeferredRatio > 100)
       errors.push('Tax-deferred ratio must be 0–100%.');
     if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 50)
