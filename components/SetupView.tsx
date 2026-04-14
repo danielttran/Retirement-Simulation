@@ -404,6 +404,12 @@ const SetupView: React.FC<SetupViewProps> = ({
     if (formState.socialSecurityAge < 50 || formState.socialSecurityAge > 85)
       errors.push('Social Security / pension claiming age must be between 50 and 85.');
 
+    // Scenario band percentiles
+    if (formState.percentileDownturn >= formState.percentileBelowAverage)
+      errors.push('Downturn percentile must be lower than Below Average percentile.');
+    if (formState.percentileBelowAverage >= formState.percentileAverage)
+      errors.push('Below Average percentile must be lower than Average percentile.');
+
     const phases = formState.spendingPhases;
     if (phases.length === 0) {
       errors.push('At least one spending phase is required.');
@@ -627,6 +633,63 @@ const SetupView: React.FC<SetupViewProps> = ({
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
                   Marginal rate on withdrawals.
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Scenario Bands ─────────────────────────────────── */}
+          <div className="max-w-2xl mx-auto mt-10 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-8 shadow-sm transition-colors duration-300">
+            <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors">
+              Scenario Bands
+            </h3>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-6 leading-relaxed transition-colors">
+              Each scenario line on the chart represents a percentile of the 100,000 Monte Carlo runs. Adjust these to stress-test different market environments — e.g. set Downturn to 5 for a worst-5% scenario.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-[11px] font-semibold text-growth-green dark:text-green-400 uppercase tracking-wider mb-2 transition-colors">
+                  Average Market (P)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
+                    min="1" max="99" type="range"
+                    value={formState.percentileAverage}
+                    onChange={(e) => updateField('percentileAverage', parseInt(e.target.value))}
+                  />
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileAverage}</span>
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Green line — baseline target scenario.</p>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-below-avg-gold dark:text-amber-400 uppercase tracking-wider mb-2 transition-colors">
+                  Below Average (P)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
+                    min="1" max="99" type="range"
+                    value={formState.percentileBelowAverage}
+                    onChange={(e) => updateField('percentileBelowAverage', parseInt(e.target.value))}
+                  />
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileBelowAverage}</span>
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Gold line — conservative planning scenario.</p>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-downturn-red dark:text-red-400 uppercase tracking-wider mb-2 transition-colors">
+                  Downturn (P)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
+                    min="1" max="99" type="range"
+                    value={formState.percentileDownturn}
+                    onChange={(e) => updateField('percentileDownturn', parseInt(e.target.value))}
+                  />
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileDownturn}</span>
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Red line — stress test (lower = more extreme).</p>
               </div>
             </div>
           </div>

@@ -248,7 +248,7 @@ interface SimulationRun {
   id: number;
   finalBalance: number;
   trajectory: Float64Array; // Memory Optimization
-  annualReturns: { stock: number; bond: number; cash: number; inflation: number }[];
+  annualReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[];
   portfolioReturns: number[];
 }
 
@@ -360,12 +360,18 @@ const simulateYear = (
       }
 
       if (returns.stock < 0) {
-        actionLog = `Market Down ${(returns.stock * 100).toFixed(1)}%.`;
-        if (!forcedSell) actionLog += ` Spending from Cash Buffer.`;
-        else actionLog += ` Cash Empty! Forced Sell.`;
+        if (!forcedSell) {
+          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: spending from Cash Bucket, stocks preserved (recovery mode).`;
+        } else {
+          actionLog = `Market down ${(returns.stock * 100).toFixed(1)}%: Cash Bucket depleted — forced stock sale to cover shortfall.`;
+        }
       } else {
-        actionLog = `Market Up ${(returns.stock * 100).toFixed(1)}%.`;
-        if (refillAmount > 0) actionLog += ` Refilled Cash ($${Math.round(refillAmount / 1000)}k).`;
+        actionLog = `Market up ${(returns.stock * 100).toFixed(1)}%.`;
+        if (refillAmount > 0) {
+          actionLog += ` Sold stock gains → refilled Cash Bucket +$${Math.round(refillAmount / 1000)}k (2-yr buffer maintained).`;
+        } else {
+          actionLog += ` Cash Bucket full; no refill needed.`;
+        }
       }
 
     } else {
@@ -404,7 +410,7 @@ const simulateYear = (
           currStock = total * targetWeights.stock;
           currBond  = total * targetWeights.bond;
           currCash  = 0;
-          actionLog = `Rebalanced ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} (drift ${(drift * 100).toFixed(1)}%).`;
+          actionLog = `Drift ${(drift * 100).toFixed(1)}% exceeded 5% band → Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
         } else {
           // WITHIN band (≤ 5 %): sell proportionally at the current allocation.
           // Only charge friction on the liquidation required to cover spending.
@@ -414,7 +420,7 @@ const simulateYear = (
           currStock = total * currentEquityRatio;
           currBond  = total * (1 - currentEquityRatio);
           currCash  = 0;
-          actionLog = `Held ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)} (within band).`;
+          actionLog = `Drift ${(drift * 100).toFixed(1)}% within ±5% band → Proportional withdrawal at ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)}, no rebalance.`;
         }
       } else {
         currStock = 0; currBond = 0; currCash = 0;
@@ -443,7 +449,7 @@ const simulateYear = (
 const generateAuditLog = (
   inputs: SimulationInputs,
   strategy: StrategyType,
-  annualReturns: { stock: number, bond: number, cash: number }[],
+  annualReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[],
   startYear: number   // same value captured by runSimulation for chart year labels
 ): AuditRow[] => {
   const log: AuditRow[] = [];
@@ -565,11 +571,11 @@ const generateAuditLog = (
       if (currentWR > state.iwr * 1.20) {
         state.spendMultiplier *= 0.90;
         state.spend           *= 0.90;
-        gkEvent = 'Capital Preservation Triggered: Withdrawal reduced by 10%.';
+        gkEvent = 'Capital Preservation Rule: CWR exceeded 120% of baseline → spending cut 10%.';
       } else if (currentWR < state.iwr * 0.80) {
         state.spendMultiplier *= 1.10;
         state.spend           *= 1.10;
-        gkEvent = 'Prosperity Rule: Withdrawal increased by 10%.';
+        gkEvent = 'Prosperity Rule: CWR fell below 80% of baseline → spending raised 10%.';
       }
     }
 
@@ -818,9 +824,13 @@ export const runSimulation = (
     // Math.floor(N × p) gives index 1000 for p=0.10, N=10000 — that is the
     // 1001st value (10.01th percentile).  Subtracting 1 from the ceiling
     // gives index 999 — exactly the 1000th value (10.00th percentile).
-    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.10) - 1]);
-    belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.25) - 1]);
-    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.50) - 1]);
+    // Use user-configured percentiles (clamped to valid 1–99 range).
+    const pDown  = Math.max(0.01, Math.min(0.99, inputs.percentileDownturn      / 100));
+    const pBelow = Math.max(0.01, Math.min(0.99, inputs.percentileBelowAverage  / 100));
+    const pAvg   = Math.max(0.01, Math.min(0.99, inputs.percentileAverage       / 100));
+    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pDown)  - 1]);
+    belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pBelow) - 1]);
+    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pAvg)   - 1]);
   }
 
   const chartData: YearResult[] = averageCurve.map((val, idx) => ({

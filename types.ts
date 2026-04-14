@@ -22,6 +22,13 @@ export interface SimulationInputs {
   birthYear: number;
   socialSecurityIncome: number; // Monthly estimate (e.g. 1200)
   socialSecurityAge: number;    // Age to start claiming
+
+  // --- Scenario Band Percentiles ---
+  // Define which Monte Carlo percentile each of the three chart lines represents.
+  // Defaults: 50 (median) / 25 (below-avg) / 10 (stress test).
+  percentileAverage: number;       // 1–99, shown as the green "Average Market" line
+  percentileBelowAverage: number;  // 1–99, shown as the gold "Below Average" line
+  percentileDownturn: number;      // 1–99, shown as the red "Downturn" line
 }
 
 export type StrategyType = 'BUCKET' | 'CONSERVATIVE' | 'AGGRESSIVE' | 'CUSTOM';

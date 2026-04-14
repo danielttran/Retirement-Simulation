@@ -64,6 +64,10 @@ const App: React.FC = () => {
       birthYear: 1961, // matches currentAge: 65 in 2026 (2026 − 65 = 1961)
       socialSecurityIncome: 1200,
       socialSecurityAge: 67,
+      // Scenario band percentiles — which Monte Carlo percentile each chart line represents.
+      percentileAverage: 50,
+      percentileBelowAverage: 25,
+      percentileDownturn: 10,
     };
   });
 
