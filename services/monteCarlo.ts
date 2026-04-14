@@ -76,7 +76,12 @@ function computeFirstYearGrossedUpSpend(
 
   let taxOwed = 0;
   if (baseSpend > 0) {
-    const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
+    let grossBaseSpend = baseSpend;
+    if (effTaxRate > 0 && effTaxRate < 1) {
+      grossBaseSpend = baseSpend / (1 - effTaxRate);
+    } else if (effTaxRate >= 1) {
+      grossBaseSpend = portfolioBalance;
+    }
     const taxFromNeeds = grossBaseSpend - baseSpend;
     const taxFromRMD = rmdAmount * taxRate;
     taxOwed = Math.max(taxFromNeeds, taxFromRMD);
@@ -105,11 +110,19 @@ const NUM_SIMULATIONS = 100000;
 
 // 2. MATHEMATICAL HELPERS
 
-function randn_bm() {
+let randnCached: number | null = null;
+function randn_bm(): number {
+  if (randnCached !== null) {
+    const val = randnCached;
+    randnCached = null;
+    return val;
+  }
   let u = 0, v = 0;
   while (u === 0) u = Math.random();
   while (v === 0) v = Math.random();
-  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  const mag = Math.sqrt(-2.0 * Math.log(u));
+  randnCached = mag * Math.sin(2.0 * Math.PI * v);
+  return mag * Math.cos(2.0 * Math.PI * v);
 }
 
 // Cholesky Decomposition
@@ -545,9 +558,14 @@ const generateAuditLog = (
     //    tax-deferred account regardless of spending need.  When the RMD exceeds the
     //    grossed-up spending withdrawal it becomes the portfolio withdrawal floor, and
     //    tax is computed on that larger distribution — not just the spending portion.
-    const grossBaseSpend = baseSpend > 0 && effTaxRate > 0 && effTaxRate < 1
-      ? baseSpend / (1 - effTaxRate)
-      : Math.max(0, baseSpend);
+    let grossBaseSpend = Math.max(0, baseSpend);
+    if (baseSpend > 0) {
+      if (effTaxRate > 0 && effTaxRate < 1) {
+        grossBaseSpend = baseSpend / (1 - effTaxRate);
+      } else if (effTaxRate >= 1) {
+        grossBaseSpend = totalPreWithdrawal;
+      }
+    }
 
     let taxOwed: number;
     if (rmdAmount > grossBaseSpend) {
@@ -739,9 +757,14 @@ export const runSimulation = (
       baseSpend *= state.spendMultiplier;
 
       // Mirrors generateAuditLog: RMD is a hard floor on the portfolio withdrawal.
-      const grossBaseSpend = baseSpend > 0 && effTaxRate > 0 && effTaxRate < 1
-        ? baseSpend / (1 - effTaxRate)
-        : Math.max(0, baseSpend);
+      let grossBaseSpend = Math.max(0, baseSpend);
+      if (baseSpend > 0) {
+        if (effTaxRate > 0 && effTaxRate < 1) {
+          grossBaseSpend = baseSpend / (1 - effTaxRate);
+        } else if (effTaxRate >= 1) {
+          grossBaseSpend = totalPreWithdrawal;
+        }
+      }
 
       let taxOwed: number;
       if (rmdThisYear > grossBaseSpend) {

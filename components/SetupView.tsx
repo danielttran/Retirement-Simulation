@@ -140,27 +140,19 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
     let targetStart = idx > 0 && !isNaN(parseInt(draftStartYear)) ? parseInt(draftStartYear) - 1 : currentStart;
     let targetEnd = !isNaN(parseInt(draftEndYear)) ? parseInt(draftEndYear) : currentEnd;
 
-    // Prevent phase inversion prior to bounding
-    if (targetStart >= targetEnd) {
-      targetStart = targetEnd - 1;
-    }
-
-    // Clamp to fixed outer bounds
+    // Clamp to fixed outer bounds derived from adjacent phases
     if (idx > 0) {
-      const minStart = updated[idx - 1].startYear + 1;
-      targetStart = Math.max(minStart, targetStart);
+      targetStart = Math.max(updated[idx - 1].startYear + 1, targetStart);
     }
 
     if (idx < updated.length - 1) {
-      const maxEnd = updated[idx + 1].endYear - 1;
-      targetEnd = Math.min(maxEnd, targetEnd);
+      targetEnd = Math.min(updated[idx + 1].endYear - 1, targetEnd);
     } else {
       targetEnd = Math.min(timeHorizon, targetEnd);
     }
 
-    // Secondary phase inversion check (in case outer bounds forced a collision)
     if (targetStart >= targetEnd) {
-      targetStart = targetEnd - 1;
+      return; // Reject the save operation
     }
 
     if (idx > 0) {
@@ -401,8 +393,8 @@ const SetupView: React.FC<SetupViewProps> = ({
 
     if (formState.taxDeferredRatio < 0 || formState.taxDeferredRatio > 100)
       errors.push('Tax-deferred ratio must be 0–100%.');
-    if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 50)
-      errors.push('Withdrawal tax rate must be 0–50%.');
+    if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 99)
+      errors.push('Withdrawal tax rate must be 0–99%.');
     if (formState.socialSecurityAge < 50 || formState.socialSecurityAge > 85)
       errors.push('Social Security / pension claiming age must be between 50 and 85.');
 
@@ -615,7 +607,15 @@ const SetupView: React.FC<SetupViewProps> = ({
                     className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
                     min="25" max="85" type="range"
                     value={formState.currentAge}
-                    onChange={(e) => updateField('currentAge', parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const newAge = parseInt(e.target.value);
+                      const currentYear = new Date().getFullYear();
+                      setFormState(prev => ({
+                        ...prev,
+                        currentAge: newAge,
+                        birthYear: currentYear - newAge
+                      }));
+                    }}
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.currentAge} yrs</span>
                 </div>
@@ -644,7 +644,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                 </label>
                 <CurrencyInput
                   value={formState.withdrawalTaxRate}
-                  onChange={(v) => updateField('withdrawalTaxRate', Math.min(50, Math.max(0, v)))}
+                  onChange={(v) => updateField('withdrawalTaxRate', Math.min(99, Math.max(0, v)))}
                   suffix="%"
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
