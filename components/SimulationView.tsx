@@ -157,17 +157,17 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
           <p className="mb-4">
             A traditional <strong>Fixed Allocation</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
           </p>
-          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Yearly Rebalancing):</p>
+          <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Drift-Band Rebalancing):</p>
           <ul className="list-disc pl-4 space-y-2 mb-4">
             <li>
-              <strong>If Stock is UP:</strong> The portfolio has too much stock. We sell some stock to refill our bonds and pay expenses.
+              <strong>If drift ≤ 5 %:</strong> Withdrawal is funded proportionally at the current mix — no corrective trades, minimal friction cost.
             </li>
             <li>
-              <strong>If Stock is DOWN:</strong> The portfolio has too many bonds. We spend from the bonds (selling them) to pay expenses and buy cheap stocks to restore the ratio.
+              <strong>If drift &gt; 5 %:</strong> A full rebalance is executed back to target, automatically buying cheap assets and trimming the overweight ones.
             </li>
           </ul>
           <p>
-            This disciplined approach automatically forces you to buy low and sell high while ensuring you always have the target mix of safety (bonds) and growth (stocks).
+            The 5 % band eliminates unnecessary round-trip costs in calm markets while preserving the buy-low / sell-high discipline when allocations drift materially.
           </p>
         </>
       )
@@ -709,14 +709,23 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                     // AUDIT TABLE HEADERS
                     <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider sticky top-0 z-10 shadow-sm transition-colors">
                       <tr>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Year / Age</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Start Balance</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Real Returns</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                          Real Returns
+                          <div className="text-[9px] text-purple-500 dark:text-purple-400 normal-case font-normal tracking-normal mt-0.5">incl. realised inflation</div>
+                        </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Growth</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Strategy Action</th>
-                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Withdrawal (today's $)</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                          Guardrail &amp; Strategy Action
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Guyton-Klinger + mechanical action</div>
+                        </th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
+                          Withdrawal (today's $)
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">incl. nominal for 1099-R</div>
+                        </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">End Balance</th>
                       </tr>
                     </thead>
@@ -739,7 +748,14 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                         <tr key={row.year} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="px-4 py-4 font-bold text-slate-700 dark:text-slate-300 leading-tight">
                             {row.year}
-                            {row.year - startYear > 0 && <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">({row.year - startYear} years away)</div>}
+                            {row.year - startYear > 0 && (
+                              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                                ({row.year - startYear} yrs)
+                              </div>
+                            )}
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                              Age {inputs.currentAge + (row.year - startYear)}
+                            </div>
                           </td>
                           {/* SS / Pension — now in column 2 so it's always visible without horizontal scrolling */}
                           <td className="px-4 py-4 font-medium transition-colors">
@@ -755,15 +771,23 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                             <div>${(row.startCash + row.startStock + row.startBond).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
                           </td>
                           <td className="px-4 py-4 text-xs font-medium">
-                            <div className={`${row.stockReturn >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>Stock: {(row.stockReturn * 100).toFixed(1)}%</div>
-                            {/* Only show Bond if strategy is NOT Bucket (which has 0 bonds) */}
+                            <div className={`${row.stockReturn >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              Stock: {(row.stockReturn * 100).toFixed(1)}%
+                            </div>
                             {selectedStrategy !== 'BUCKET' && (
-                              <div className={`${row.bondReturn >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>Bond: {(row.bondReturn * 100).toFixed(1)}%</div>
+                              <div className={`${row.bondReturn >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
+                                Bond: {(row.bondReturn * 100).toFixed(1)}%
+                              </div>
                             )}
-                            {/* Only show Cash if strategy IS Bucket (Fixed allocations have 0 cash) */}
                             {selectedStrategy === 'BUCKET' && (
-                              <div className="text-slate-400 dark:text-slate-500">Cash: {(row.cashReturn * 100).toFixed(1)}%</div>
+                              <div className="text-slate-400 dark:text-slate-500">
+                                Cash: {(row.cashReturn * 100).toFixed(1)}%
+                              </div>
                             )}
+                            {/* Realised stochastic inflation — varies from the user's mean input */}
+                            <div className={`mt-0.5 border-t border-slate-100 dark:border-slate-800 pt-0.5 ${row.realizedInflation > 0 ? 'text-purple-500 dark:text-purple-400' : 'text-blue-500 dark:text-blue-400'}`}>
+                              Infl: {(row.realizedInflation * 100).toFixed(1)}%
+                            </div>
                           </td>
                           <td className={`px-4 py-4 font-bold ${row.growthAmount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-downturn-red dark:text-red-400'}`}>
                             {row.growthAmount >= 0 ? '+' : ''}${row.growthAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -772,7 +796,29 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                             -${row.feesAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </td>
                           <td className="px-4 py-4 text-xs font-medium text-slate-700 dark:text-slate-400 leading-relaxed transition-colors">
-                            {row.action}
+                            {/* Guyton-Klinger guardrail event — styled as a distinct badge so it
+                                is never confused with the mechanical strategy action below it. */}
+                            {row.gkEvent && (
+                              <div className={`mb-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${
+                                row.gkEvent.startsWith('Capital')
+                                  ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
+                              }`}>
+                                <span className="material-symbols-outlined text-xs leading-none">
+                                  {row.gkEvent.startsWith('Capital') ? 'shield' : 'trending_up'}
+                                </span>
+                                {row.gkEvent}
+                              </div>
+                            )}
+                            {/* Mechanical strategy action (rebalance, bucket refill, etc.) */}
+                            <div>{row.action}</div>
+                            {/* Accumulated G-K spend multiplier — shown whenever it deviates from
+                                the baseline so users can see the compounding effect over years. */}
+                            {Math.abs(row.spendMultiplier - 1.0) > 0.001 && (
+                              <div className="mt-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                GK Multiplier: ×{row.spendMultiplier.toFixed(3)}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
                             {row.withdrawal - row.taxPaid < 0 ? (
@@ -784,25 +830,23 @@ Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
                                 Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </div>
                             )}
-                            {/* Always show Tax line — grey when $0, red when positive — so users can
-                                verify that the tax gross-up is being applied for all strategies. */}
+                            {/* Tax line — grey when $0, red when positive — lets users verify
+                                the tax gross-up is being applied for all strategies. */}
                             <div className={row.taxPaid > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'}>
                               Tax: {row.taxPaid > 0 ? `-$${row.taxPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0'}
                             </div>
                             <div className="font-bold border-t border-slate-200 dark:border-slate-700 mt-1 pt-1 text-slate-800 dark:text-slate-200">
                               Total Draw: {row.withdrawal < 0 ? '+' : '-'}${Math.abs(row.withdrawal).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
-                            {/* Nominal withdrawal — same amount in future (inflated) dollars — shows that
-                                inflation IS accounted for: the portfolio runs in real terms so a $30k
-                                spend in year 20 costs ~$54k in nominal dollars at 3% inflation. */}
-                            {inputs.inflationRate > 0 && (
-                              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                                Nominal: ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </div>
-                            )}
+                            {/* Nominal (future-dollar) figure uses the actual cumulative product of
+                                stochastic inflation draws — not a fixed-rate approximation.
+                                This is the 1099-R reference amount the retiree would see. */}
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                              Nominal (1099-R): ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
                             {row.rmdAmount > 0 && (
-                              <div className="text-[9px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wide mt-1">
-                                RMD Evaluated
+                              <div className="mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 inline-block uppercase tracking-wide">
+                                RMD ≥ ${row.rmdAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </div>
                             )}
                           </td>

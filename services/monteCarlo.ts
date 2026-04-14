@@ -165,7 +165,7 @@ function generateAnnualReturns(
   nominalAssumptions: typeof NOMINAL_ASSUMPTIONS,
   meanInflation: number,
   inflationStdDev = 0.015
-): { stock: number; bond: number; cash: number } {
+): { stock: number; bond: number; cash: number; inflation: number } {
 
   // --- Step 1: Four independent standard-normal draws ---
   const Z = [randn_bm(), randn_bm(), randn_bm()];
@@ -234,7 +234,9 @@ function generateAnnualReturns(
     stockReturn = (1 + stockReturn) * (1 - shock) - 1;
   }
 
-  return { stock: stockReturn, bond: bondReturn, cash: cashReturn };
+  // Return the realised inflation alongside asset returns so callers can
+  // accumulate a precise cumulative inflation factor for nominal-dollar reporting.
+  return { stock: stockReturn, bond: bondReturn, cash: cashReturn, inflation: annualInflation };
 }
 
 // 3. SIMULATION LOGIC
@@ -243,7 +245,7 @@ interface SimulationRun {
   id: number;
   finalBalance: number;
   trajectory: Float64Array; // Memory Optimization
-  annualReturns: { stock: number; bond: number; cash: number }[];
+  annualReturns: { stock: number; bond: number; cash: number; inflation: number }[];
   portfolioReturns: number[];
 }
 
@@ -497,6 +499,11 @@ const generateAuditLog = (
     state.cash = 0;
   }
 
+  // Tracks the product of (1 + realised_inflation) across all years for precise
+  // nominal-dollar reporting.  Using the actual stochastic draws (stored in the
+  // returns array) is more accurate than a fixed compound factor.
+  let cumulativeInflationFactor = 1.0;
+
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
@@ -511,57 +518,48 @@ const generateAuditLog = (
       ? inputs.socialSecurityIncome * 12
       : 0;
 
-    // Supplemental Income offsets need for portfolio withdrawals
-    if (ssIncomeThisYear > 0) {
-      baseSpend -= ssIncomeThisYear;
-    }
+    if (ssIncomeThisYear > 0) baseSpend -= ssIncomeThisYear;
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
 
-    // 2. Tax logic fix: The portfolio effectively only "loses" what the user consumes (baseSpend)
-    // plus what the IRS consumes (taxOwed). Unspent RMD proceeds remain invested natively.
-    const taxRate = inputs.withdrawalTaxRate / 100;
+    const taxRate    = inputs.withdrawalTaxRate / 100;
     const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
+    // BUG FIX: Apply the accumulated G-K multiplier BEFORE computing taxOwed so
+    // the tax gross-up reflects the actual (already-adjusted) spending need, not
+    // the pre-guardrail amount.  (Prior order over-taxed Capital Preservation years.)
+    baseSpend *= state.spendMultiplier;
+
+    // 2. Tax gross-up on the G-K-adjusted baseSpend.
     let taxOwed = 0;
     if (baseSpend > 0) {
       const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
-      const taxFromNeeds = grossBaseSpend - baseSpend;
-      // Tax on RMD is calculated on the full amount since the entire RMD comes from tax-deferred sources.
-      const taxFromRMD = rmdAmount * taxRate;
+      const taxFromNeeds   = grossBaseSpend - baseSpend;
+      const taxFromRMD     = rmdAmount * taxRate;
       taxOwed = Math.max(taxFromNeeds, taxFromRMD);
     } else {
-      // User is fully funded by SS/Pension, but RMD still triggers a taxable event
-      taxOwed = rmdAmount * taxRate;
+      taxOwed = rmdAmount * taxRate; // SS/pension fully funds spending; RMD still taxable
     }
 
-    // Apply Guyton-Klinger spend multiplier before finalising state.spend.
-    // The multiplier accumulates permanently across years via state.spendMultiplier.
-    baseSpend *= state.spendMultiplier;
     state.spend = baseSpend + taxOwed;
 
     // --- Guyton-Klinger Guardrail Check ---
-    // CWR = current withdrawal rate (this year's spend / pre-withdrawal portfolio).
-    // Year 1 establishes the IWR baseline; years 2+ may trigger adjustments.
-    let gkLog = '';
-    const totalPreWithdrawalAudit = state.stock + state.bond + state.cash;
-    const currentWR = totalPreWithdrawalAudit > 0.01 ? state.spend / totalPreWithdrawalAudit : 0;
+    // CWR uses totalPreWithdrawal (already computed above) — no duplicate calculation.
+    let gkEvent = '';
+    const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
     if (year === 1) {
-      // First retirement year: set the Initial Withdrawal Rate baseline.
-      state.iwr = currentWR;
+      state.iwr = currentWR; // Baseline IWR set in the first retirement year
     } else if (state.iwr > 0.0001) {
       if (currentWR > state.iwr * 1.20) {
-        // Capital Preservation Rule: withdraw rate ≥ 120 % of IWR → cut spend 10 %.
         state.spendMultiplier *= 0.90;
         state.spend           *= 0.90;
-        gkLog = 'Capital Preservation Triggered: Withdrawal reduced by 10%.';
+        gkEvent = 'Capital Preservation Triggered: Withdrawal reduced by 10%.';
       } else if (currentWR < state.iwr * 0.80) {
-        // Prosperity Rule: withdraw rate ≤ 80 % of IWR → raise spend 10 %.
         state.spendMultiplier *= 1.10;
         state.spend           *= 1.10;
-        gkLog = 'Prosperity Rule: Withdrawal increased by 10%.';
+        gkEvent = 'Prosperity Rule: Withdrawal increased by 10%.';
       }
     }
 
@@ -571,33 +569,35 @@ const generateAuditLog = (
 
     const returns = annualReturns[year - 1];
 
+    // Accumulate stochastic inflation for accurate nominal-dollar conversion.
+    cumulativeInflationFactor *= (1 + returns.inflation);
+
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
 
-    // Prepend any G-K message so the audit action column shows both the guardrail
-    // event and the strategy action in the same cell.
-    const fullAction = [gkLog, outcome.actionLog].filter(Boolean).join(' ');
-
-    // Nominal withdrawal = real withdrawal × cumulative inflation factor for CPA / 1099-R reference
-    const inflationFactor = Math.pow(1 + inputs.inflationRate / 100, year);
-    const nominalWithdrawal = outcome.withdrawal * inflationFactor;
+    // Nominal withdrawal uses the exact cumulative product of stochastic inflation
+    // draws (not a fixed-rate approximation) for a precise 1099-R reference figure.
+    const nominalWithdrawal = outcome.withdrawal * cumulativeInflationFactor;
 
     log.push({
       year: startYear + year,
       startCash,
       startStock,
       startBond,
-      stockReturn: returns.stock,
-      bondReturn: returns.bond,
-      cashReturn: returns.cash,
-      growthAmount: outcome.growth,
-      feesAmount: outcome.fees,
-      action: fullAction,
-      withdrawal: outcome.withdrawal,
-      taxPaid: taxOwed,
-      endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
+      stockReturn:       returns.stock,
+      bondReturn:        returns.bond,
+      cashReturn:        returns.cash,
+      realizedInflation: returns.inflation,
+      growthAmount:      outcome.growth,
+      feesAmount:        outcome.fees,
+      action:            outcome.actionLog, // strategy-only mechanical action
+      gkEvent,                              // G-K event isolated for styled badge rendering
+      withdrawal:        outcome.withdrawal,
+      taxPaid:           taxOwed,
+      endTotal:          outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
       rmdAmount,
       nominalWithdrawal,
-      ssIncome: ssIncomeThisYear,
+      ssIncome:          ssIncomeThisYear,
+      spendMultiplier:   state.spendMultiplier, // current accumulated G-K factor this year
     });
 
     state = outcome.nextState;
@@ -705,6 +705,9 @@ export const runSimulation = (
       const taxRate = inputs.withdrawalTaxRate / 100;
       const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
+      // Apply G-K multiplier BEFORE tax so gross-up is on the adjusted spend amount.
+      baseSpend *= state.spendMultiplier;
+
       let taxOwed = 0;
       if (baseSpend > 0) {
         const grossBaseSpend = effTaxRate > 0 && effTaxRate < 1 ? baseSpend / (1 - effTaxRate) : baseSpend;
@@ -715,8 +718,6 @@ export const runSimulation = (
         taxOwed = rmdThisYear * taxRate;
       }
 
-      // Apply Guyton-Klinger spend multiplier (accumulated from prior year triggers).
-      baseSpend *= state.spendMultiplier;
       state.spend = baseSpend + taxOwed;
 
       // --- Guyton-Klinger Guardrail Check ---

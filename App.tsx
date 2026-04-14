@@ -111,6 +111,14 @@ const App: React.FC = () => {
     setIsSimulating(true);
     setSimulationError(null);
 
+    // Terminate any in-flight worker so a stale slow run cannot overwrite the
+    // result of a newer run that completes first.  Termination is instant; the
+    // next getWorker() call creates a fresh instance.
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
     const worker = getWorker();
 
     // Replace the message handler for this invocation (handles superseded runs).
