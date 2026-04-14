@@ -620,7 +620,11 @@ export const runSimulation = (
     }
 
     const finalVal = state.stock + state.bond + state.cash;
-    if (finalVal <= 1) failures++;
+    
+    // A run is considered a failure if it drops to $1 or below at ANY point,
+    // even if later Social Security deposits technically made the balance positive again.
+    const droppedToZero = currentRunTrajectory.some(val => val <= 1);
+    if (droppedToZero) failures++;
 
     let variance = 0;
     if (runPortfolioReturns.length > 1) {

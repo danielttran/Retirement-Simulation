@@ -76,11 +76,43 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const [viewDuration, setViewDuration] = useState<number | 'MAX'>('MAX');
   const [auditMode, setAuditMode] = useState(false);
   const [auditScenario, setAuditScenario] = useState<'AVERAGE' | 'BELOW' | 'DOWNTURN'>('BELOW');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Use the year stamped on the simulation data rather than the current clock so
   // that chart x-axis, audit row year labels, and "X years away" offsets are all
   // consistent even if the component renders after a calendar-year boundary.
   const startYear = results.data.length > 0 ? results.data[0].year : new Date().getFullYear();
+
+  const aiPromptText = useMemo(() => {
+    return `Retirement Simulation Validation Request:
+Please evaluate the mathematical correctness and risk of the following retirement plan.
+
+--- INPUTS ---
+Portfolio: $${(inputs.initialCash + inputs.initialInvestments).toLocaleString()} (Cash: $${inputs.initialCash.toLocaleString()}, Investments: $${inputs.initialInvestments.toLocaleString()})
+Start Year: ${startYear}
+Time Horizon: ${inputs.timeHorizon} years
+Inflation Rate: ${inputs.inflationRate}%
+Management Fee: ${inputs.managementFee}%
+Retirement Age: ${inputs.currentAge} years
+Tax Deferred Ratio: ${inputs.taxDeferredRatio}%
+Withdrawal Tax Rate: ${inputs.withdrawalTaxRate}%
+Social Security Income: $${inputs.socialSecurityIncome.toLocaleString()}/mo starting at age ${inputs.socialSecurityAge}
+
+--- SPENDING PHASES ---
+${inputs.spendingPhases.map(p => `Year ${p.startYear} to ${p.endYear}: $${p.annualSpend.toLocaleString()}/yr`).join('\n')}
+
+--- STRATEGY SETTINGS ---
+Selected Strategy: ${selectedStrategy}
+Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(results.allocation.bond * 100).toFixed(1)}% Bond / ${(results.allocation.cash * 100).toFixed(1)}% Cash
+
+--- SIMULATION RESULTS (10,000 Monte Carlo Runs) ---
+Success Rate: ${results.successRate.toFixed(1)}% (Portfolio > $0 at end of term)
+Expected Final Median Value (Real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+Projected Annualized Volatility: ${results.volatility.toFixed(1)}%
+`;
+  }, [inputs, results, selectedStrategy, startYear]);
+
+
   const runTime = new Date(results.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   const formatCurrency = (val: number) => {
@@ -344,8 +376,101 @@ const SimulationView: React.FC<SimulationViewProps> = ({
           </div>
         </div>
 
+        <div className="flex flex-wrap justify-start items-center mb-6 gap-6">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 hidden md:block">Analysis Dashboard</h2>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              role="switch"
+              aria-checked={isSidebarOpen}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isSidebarOpen ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+            >
+              <span className="sr-only">Toggle Sidebar</span>
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isSidebarOpen ? 'translate-x-5' : 'translate-x-0'}`}
+              />
+            </button>
+            <span
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors uppercase tracking-wider cursor-pointer"
+            >
+              {isSidebarOpen ? 'Hide Insights' : 'Show Insights'}
+            </span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-12 gap-10">
-          <div className="col-span-12 lg:col-span-9">
+          {/* Sidebar Insights (Moved to Left) */}
+          {isSidebarOpen && (
+            <aside className="col-span-12 lg:col-span-3 space-y-8">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 shadow-sm relative overflow-hidden transition-all duration-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 dark:bg-primary/5 rounded-full -mr-16 -mt-16 transition-colors"></div>
+                <div className="relative">
+                  <h3 className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-6 flex items-center gap-2 transition-colors">
+                    <span className="material-symbols-outlined text-lg text-primary">info</span>
+                    Strategy Insight
+                  </h3>
+                  <div className="space-y-6 text-xs leading-relaxed text-slate-500 dark:text-slate-400 font-medium transition-colors">
+                    {getStrategyDescription(selectedStrategy)}
+                    <div className="space-y-4 pt-2">
+                      <h4 className="text-[11px] font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider transition-colors">Active Weights (Target)</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between items-center text-[11px] mb-2">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold transition-colors">Liquid / Cash</span>
+                            <span className="font-bold text-slate-900 dark:text-slate-200 transition-colors">{(results.allocation.cash * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full transition-colors">
+                            <div className="bg-primary h-full rounded-full" style={{ width: `${results.allocation.cash * 100}%` }}></div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center text-[11px] mb-2">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold transition-colors">Bonds</span>
+                            <span className="font-bold text-slate-900 dark:text-slate-200 transition-colors">{(results.allocation.bond * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full transition-colors">
+                            <div className="bg-slate-500 h-full rounded-full" style={{ width: `${results.allocation.bond * 100}%` }}></div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center text-[11px] mb-2">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold transition-colors">Equities</span>
+                            <span className="font-bold text-slate-900 dark:text-slate-200 transition-colors">{(results.allocation.stock * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full transition-colors">
+                            <div className="bg-green-600 h-full rounded-full" style={{ width: `${results.allocation.stock * 100}%` }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm transition-all duration-300">
+                <p className="text-[11px] font-semibold text-primary uppercase mb-2 tracking-wider">Simulation Core</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed transition-colors">Parametric model calibrated to long-term historical averages for variance modeling.</p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm transition-all duration-300">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Prompt for AI Validation</p>
+                  <button onClick={() => navigator.clipboard.writeText(aiPromptText)} className="text-slate-400 hover:text-purple-600 transition-colors cursor-pointer" title="Copy to clipboard">
+                    <span className="material-symbols-outlined text-sm">content_copy</span>
+                  </button>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800 rounded p-3 h-55 overflow-y-auto custom-scrollbar border border-slate-100 dark:border-slate-700">
+                  <pre className="text-[10px] text-slate-600 dark:text-slate-400 whitespace-pre-wrap font-mono leading-relaxed font-medium">
+                    {aiPromptText}
+                  </pre>
+                </div>
+              </div>
+            </aside>
+          )}
+
+          <div className={`col-span-12 ${isSidebarOpen ? 'lg:col-span-9' : 'lg:col-span-12'} transition-all duration-300`}>
 
             {/* Chart Container */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-10 shadow-sm mb-10 transition-colors duration-300">
@@ -741,59 +866,6 @@ const SimulationView: React.FC<SimulationViewProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Sidebar Insights */}
-          <aside className="col-span-12 lg:col-span-3 space-y-8">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 shadow-sm relative overflow-hidden transition-all duration-300">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 dark:bg-primary/5 rounded-full -mr-16 -mt-16 transition-colors"></div>
-              <div className="relative">
-                <h3 className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-6 flex items-center gap-2 transition-colors">
-                  <span className="material-symbols-outlined text-lg text-primary">info</span>
-                  Strategy Insight
-                </h3>
-                <div className="space-y-6 text-xs leading-relaxed text-slate-500 dark:text-slate-400 font-medium transition-colors">
-                  {getStrategyDescription(selectedStrategy)}
-                  <div className="space-y-4 pt-2">
-                    <h4 className="text-[11px] font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider transition-colors">Active Weights (Target)</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between items-center text-[11px] mb-2">
-                          <span className="text-slate-500 dark:text-slate-400 font-bold transition-colors">Liquid / Cash</span>
-                          <span className="font-bold text-slate-900 dark:text-slate-200 transition-colors">{(results.allocation.cash * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full transition-colors">
-                          <div className="bg-primary h-full rounded-full" style={{ width: `${results.allocation.cash * 100}%` }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center text-[11px] mb-2">
-                          <span className="text-slate-500 dark:text-slate-400 font-bold transition-colors">Bonds</span>
-                          <span className="font-bold text-slate-900 dark:text-slate-200 transition-colors">{(results.allocation.bond * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full transition-colors">
-                          <div className="bg-slate-500 h-full rounded-full" style={{ width: `${results.allocation.bond * 100}%` }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center text-[11px] mb-2">
-                          <span className="text-slate-500 dark:text-slate-400 font-bold transition-colors">Equities</span>
-                          <span className="font-bold text-slate-900 dark:text-slate-200 transition-colors">{(results.allocation.stock * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full transition-colors">
-                          <div className="bg-green-600 h-full rounded-full" style={{ width: `${results.allocation.stock * 100}%` }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm transition-all duration-300">
-              <p className="text-[11px] font-semibold text-primary uppercase mb-2 tracking-wider">Simulation Core</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed transition-colors">Parametric model calibrated to long-term historical averages for variance modeling.</p>
-            </div>
-          </aside>
         </div>
       </main >
     </div >

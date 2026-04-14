@@ -36,23 +36,38 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // Default inputs
-  const [inputs, setInputs] = useState<SimulationInputs>({
-    initialCash: 10000,
-    initialInvestments: 400000,
-    spendingPhases: [{ id: 1, startYear: 0, endYear: 30, annualSpend: 30000 }],
-    timeHorizon: 40,
-    inflationRate: 3.0,
-    managementFee: 0.10,
-    customStockAllocation: 50,
-    // CPA-grade defaults: typical pre-retiree profile
-    currentAge: 65,
-    taxDeferredRatio: 80,  // 80% in Traditional IRA/401(k) is common for US retirees
-    withdrawalTaxRate: 22, // 22% federal marginal bracket (2024 MFJ: $94k–$201k)
-    birthYear: 1961, // matches currentAge: 65 in 2026 (2026 − 65 = 1961)
-    socialSecurityIncome: 1200,
-    socialSecurityAge: 67,
+  // Default inputs, with localStorage hydration
+  const [inputs, setInputs] = useState<SimulationInputs>(() => {
+    const saved = localStorage.getItem('simulationInputs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse cached inputs:', e);
+      }
+    }
+    return {
+      initialCash: 10000,
+      initialInvestments: 400000,
+      spendingPhases: [{ id: 1, startYear: 0, endYear: 30, annualSpend: 30000 }],
+      timeHorizon: 40,
+      inflationRate: 3.0,
+      managementFee: 0.10,
+      customStockAllocation: 50,
+      // CPA-grade defaults: typical pre-retiree profile
+      currentAge: 65,
+      taxDeferredRatio: 80,  // 80% in Traditional IRA/401(k) is common for US retirees
+      withdrawalTaxRate: 22, // 22% federal marginal bracket (2024 MFJ: $94k–$201k)
+      birthYear: 1961, // matches currentAge: 65 in 2026 (2026 − 65 = 1961)
+      socialSecurityIncome: 1200,
+      socialSecurityAge: 67,
+    };
   });
+
+  // Update cache whenever inputs change
+  useEffect(() => {
+    localStorage.setItem('simulationInputs', JSON.stringify(inputs));
+  }, [inputs]);
 
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType>('BUCKET');
   const [results, setResults] = useState<SimulationResult | null>(null);
