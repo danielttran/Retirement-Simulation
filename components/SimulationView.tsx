@@ -102,7 +102,7 @@ Tax-Deferred Ratio: ${inputs.taxDeferredRatio}%  |  Withdrawal Tax Rate: ${input
 Social Security: $${inputs.socialSecurityIncome.toLocaleString()}/mo starting at age ${inputs.socialSecurityAge}
 
 --- SPENDING PHASES ---
-${inputs.spendingPhases.map(p => `  Year ${p.startYear}–${p.endYear}: $${p.annualSpend.toLocaleString()}/yr (in today's dollars)`).join('\n')}
+${inputs.spendingPhases.map(p => `  Year ${p.startYear + 1}–${p.endYear}: $${p.annualSpend.toLocaleString()}/yr (in today's dollars)`).join('\n')}
 
 --- STRATEGY ---
 Selected Strategy: ${selectedStrategy}
@@ -121,7 +121,7 @@ All portfolio values are in real (today's) dollars; nominalWithdrawal for 1099-R
 Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowAverage} (gold), P${inputs.percentileDownturn} (red) of 100,000 runs
 
 --- SIMULATION RESULTS ---
-Success Rate: ${results.successRate.toFixed(1)}% (portfolio > $0 at end of ${inputs.timeHorizon}-year term)
+Success Rate: ${results.successRate.toFixed(1)}% (portfolio balance never fell to $1 or below at any point during the ${inputs.timeHorizon}-year term)
 Median Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
 Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
 
@@ -744,13 +744,13 @@ ${auditSample}
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">shield</span>Capital Preservation
                       </span>
-                      <span>Safety Guardrail Triggered: Your withdrawal rate exceeded 120% of the rate you started with &mdash; meaning your portfolio is shrinking faster than your spending justifies. Spending was automatically reduced by 10% to extend your portfolio&apos;s life.</span>
+                      <span>Safety Guardrail Triggered: Your gross portfolio withdrawal rate exceeded 120% of the rate set in your first retirement year &mdash; meaning your portfolio is shrinking faster than your spending justifies. Spending was automatically reduced by 10% to extend your portfolio&apos;s life.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">trending_up</span>Prosperity Rule
                       </span>
-                      <span>Prosperity Guardrail Triggered: Your withdrawal rate dropped below 80% of the starting rate &mdash; your portfolio is very healthy. Spending was safely raised by 10%!</span>
+                      <span>Prosperity Guardrail Triggered: Your gross portfolio withdrawal rate dropped below 80% of the rate set in your first retirement year &mdash; your portfolio is very healthy. Spending was safely raised by 10%!</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap shrink-0">
@@ -776,7 +776,7 @@ ${auditSample}
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3 border-t border-slate-200 dark:border-slate-700 pt-2">
-                    Math check: <strong>Start Balance + Growth − Fees − Total Draw = End Balance</strong> for every row. All values in real (today's) dollars unless "Nominal" is specified.
+                    Math check: <strong>Start Balance + Growth &minus; Fees &minus; Total Draw = End Balance</strong> for every row. All values in real (today&apos;s) dollars unless &ldquo;Nominal&rdquo; is specified. <em>Growth is pre-fee gross return; Total Draw is the gross portfolio withdrawal including tax withholding.</em>
                   </p>
                 </div>
               )}
@@ -813,11 +813,11 @@ ${auditSample}
                       <tr>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80">Year</th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500">
-                          Average Market
+                          Most Likely
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileAverage} of 100k runs</div>
                         </th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-below-avg-gold dark:text-amber-500">
-                          Below Average
+                          Conservative
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileBelowAverage} of 100k runs</div>
                         </th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-downturn-red dark:text-red-500">
@@ -920,15 +920,9 @@ ${auditSample}
                             )}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
-                            {row.withdrawal - row.taxPaid < 0 ? (
-                              <div className="text-emerald-600 dark:text-emerald-500 font-bold">
-                                Deposit: +${Math.abs(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </div>
-                            ) : (
-                              <div>
-                                Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                              </div>
-                            )}
+                            <div>
+                              Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
                             {/* Tax line — grey when $0, red when positive — lets users verify
                                 the tax gross-up is being applied for all strategies. */}
                             <div className={row.taxPaid > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'}>
@@ -995,7 +989,7 @@ ${auditSample}
                 <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : 'text-amber-600 dark:text-amber-500'}`}>
                   <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : 'Monitor Closely'}
                 </span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of the 100,000 simulations where the portfolio never ran dry at any point during the {inputs.timeHorizon}-year period &mdash; not just at the end.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of the 100,000 simulations where the portfolio balance never fell to $1 or below at any point during the {inputs.timeHorizon}-year period &mdash; not just at the end. A single year of depletion counts as failure even if later income temporarily restored the balance.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Median Final Portfolio Value</span>
@@ -1012,8 +1006,8 @@ ${auditSample}
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Initial Spend Rate</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{((inputs.spendingPhases[0].annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Pre-tax, before SS &amp; G-K adjustments</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">First-year spending &divide; total portfolio, both in today's dollars. Your actual withdrawal rate shifts every year via Safety and Bonus guardrails. Target benchmark for a 30-year horizon: 3.5&ndash;4.5%.</p>
+                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Pre-tax, pre-SS, before G-K guardrail adjustments</span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">First-year spending &divide; total portfolio, both in today's dollars. Social Security income and Guyton-Klinger guardrails will shift your effective withdrawal rate each year. Target benchmark for a 30-year horizon: 3.5&ndash;4.5%.</p>
               </div>
             </div>
 

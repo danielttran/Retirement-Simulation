@@ -590,11 +590,15 @@ const generateAuditLog = (
       if (currentWR > state.iwr * 1.20) {
         state.spendMultiplier *= 0.90;
         state.spend           *= 0.90;
-        gkEvent = 'Safety Guardrail: Withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
+        // Recalculate taxOwed from the post-G-K spend so audit row is accurate.
+        taxOwed = state.spend - Math.max(0, baseSpend * 0.90);
+        gkEvent = 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
       } else if (currentWR < state.iwr * 0.80) {
         state.spendMultiplier *= 1.10;
         state.spend           *= 1.10;
-        gkEvent = 'Prosperity Guardrail: Withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
+        // Recalculate taxOwed from the post-G-K spend so audit row is accurate.
+        taxOwed = state.spend - Math.max(0, baseSpend * 1.10);
+        gkEvent = 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
       }
     }
 
@@ -786,9 +790,13 @@ export const runSimulation = (
         if (currentWR > state.iwr * 1.20) {
           state.spendMultiplier *= 0.90;
           state.spend           *= 0.90;
+          // Recalculate taxOwed from the post-G-K spend to keep totalPortfolio accounting accurate.
+          taxOwed = state.spend - Math.max(0, baseSpend * 0.90);
         } else if (currentWR < state.iwr * 0.80) {
           state.spendMultiplier *= 1.10;
           state.spend           *= 1.10;
+          // Recalculate taxOwed from the post-G-K spend to keep totalPortfolio accounting accurate.
+          taxOwed = state.spend - Math.max(0, baseSpend * 1.10);
         }
       }
 
@@ -828,7 +836,10 @@ export const runSimulation = (
       // Bessel's correction (N-1) gives an unbiased sample variance estimate.
       variance = runPortfolioReturns.reduce((sq, n) => sq + Math.pow(n - meanR, 2), 0) / (runPortfolioReturns.length - 1);
     }
-    totalAnnualizedVol += Math.sqrt(variance);
+    // Accumulate variance (not stdDev) so we can take a single sqrt after all runs.
+    // Averaging stdDev per-run then sqrt-ing would give a biased estimator due to
+    // Jensen's inequality: E[sqrt(X)] < sqrt(E[X]). Averaging variance first is correct.
+    totalAnnualizedVol += variance;
 
     // We only store the full object if we might need it, but we can't optimize this fully away 
     // without refactoring how audit logs are retrieved.
@@ -921,7 +932,9 @@ export const runSimulation = (
   const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns, currentYear, dynamicAssumptions);
 
   const finalMedian = medianRun.finalBalance;
-  const avgVol = (totalAnnualizedVol / NUM_SIMULATIONS) * 100;
+  // Take sqrt of the average variance across all runs — correct pooled stdDev estimator.
+  // (Previously averaged per-run stdDevs which underestimates due to Jensen's inequality.)
+  const avgVol = Math.sqrt(totalAnnualizedVol / NUM_SIMULATIONS) * 100;
 
   // Display Allocation Calc
   let dispStock = targetStockWeight;

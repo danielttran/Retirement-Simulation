@@ -17,7 +17,7 @@ export interface SimulationInputs {
   // --- Tax & RMD (CPA-grade) ---
   currentAge: number;        // User's age at retirement start — drives RMD schedule
   taxDeferredRatio: number;  // 0–100: % of investable assets held in Traditional IRA / 401(k)
-  withdrawalTaxRate: number; // Effective marginal rate (0–50%) applied to all withdrawals
+  withdrawalTaxRate: number; // Effective marginal rate (0–60%) applied to pre-tax account withdrawals
   
   // --- Supplemental Income (Social Security / Pension) ---
   birthYear: number;

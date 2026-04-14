@@ -191,7 +191,7 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
 
       {/* Year Markers */}
       <div className="relative h-5 mb-3 text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none">
-        <span className="absolute left-0">0</span>
+        <span className="absolute left-0">Yr 1</span>
         {phases.slice(1).map((phase) => {
           const leftPct = (phase.startYear / timeHorizon) * 100;
           return (
@@ -200,11 +200,11 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
               className="absolute -translate-x-1/2"
               style={{ left: `${leftPct}%` }}
             >
-              {phase.startYear}
+              Yr {phase.startYear + 1}
             </span>
           );
         })}
-        <span className="absolute right-0">{timeHorizon}</span>
+        <span className="absolute right-0">Yr {timeHorizon}</span>
       </div>
 
       {/* Phase List */}
@@ -393,8 +393,8 @@ const SetupView: React.FC<SetupViewProps> = ({
 
     if (formState.taxDeferredRatio < 0 || formState.taxDeferredRatio > 100)
       errors.push('Tax-deferred ratio must be 0–100%.');
-    if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 99)
-      errors.push('Withdrawal tax rate must be 0–99%.');
+    if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 60)
+      errors.push('Withdrawal tax rate must be 0–60%.');
     if (formState.socialSecurityAge < 50 || formState.socialSecurityAge > 85)
       errors.push('Social Security / pension claiming age must be between 50 and 85.');
 
@@ -517,12 +517,12 @@ const SetupView: React.FC<SetupViewProps> = ({
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Age to Claim</label>
                 <input
                   type="number"
-                  min="50" max="80"
+                  min="50" max="85"
                   className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-medium"
                   value={formState.socialSecurityAge}
                   onChange={(e) => updateField('socialSecurityAge', parseInt(e.target.value) || 0)}
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Social Security can be claimed from age 62 (reduced benefit) to age 70 (maximum benefit). Each year you delay past your Full Retirement Age adds roughly 8% to your monthly check.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">The age at which your monthly benefit begins. Social Security: age 62 (reduced) to 70 (maximum). Pensions or annuities may start earlier (age 50+). Delaying Social Security past your Full Retirement Age adds roughly 8% per year to your monthly check.</p>
               </div>
             </div>
 
@@ -644,11 +644,11 @@ const SetupView: React.FC<SetupViewProps> = ({
                 </label>
                 <CurrencyInput
                   value={formState.withdrawalTaxRate}
-                  onChange={(v) => updateField('withdrawalTaxRate', Math.min(99, Math.max(0, v)))}
+                  onChange={(v) => updateField('withdrawalTaxRate', Math.min(60, Math.max(0, v)))}
                   suffix="%"
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  Your expected income tax rate on pre-tax account withdrawals. Only the pre-tax portion (set above) is taxed &mdash; e.g., if 60% is in a Traditional IRA and your rate is 22%, the blended drag is 13.2% of all withdrawals. Typical range: 10&ndash;32%.
+                  Your expected income tax rate on pre-tax account withdrawals. Only the pre-tax portion (set above) is taxed &mdash; e.g., if 60% is in a Traditional IRA and your rate is 22%, the blended drag is 13.2% of all withdrawals. Typical range: 10&ndash;32%. Maximum allowed: 60% (extreme edge case for large distributions).
                 </p>
               </div>
             </div>
