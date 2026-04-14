@@ -466,7 +466,7 @@ const SetupView: React.FC<SetupViewProps> = ({
         <div className="max-w-3xl mx-auto text-center mb-20">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-6 transition-colors">Retirement Simulation Setup</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm font-light leading-relaxed transition-colors">
-            Configure your financial parameters. Our engine will simultaneously run multiple strategic scenarios—from cash-bucket approaches to bond-heavy allocations—to find your optimal path.
+            Enter your numbers below. The engine runs <strong>100,000 randomized market scenarios</strong> across four withdrawal strategies — Bucket, 60/40, 70/30, and Custom — so you can compare how each holds up in every possible future.
           </p>
         </div>
 
@@ -485,6 +485,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   value={formState.birthYear}
                   onChange={(e) => updateField('birthYear', parseInt(e.target.value) || 0)}
                 />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Used to calculate your age each year and to determine when IRS Required Minimum Distributions (RMDs) begin — age 72 (born &le;1950), 73 (born 1951–1959), or 75 (born &ge;1960) under SECURE 2.0.</p>
               </div>
 
               <div>
@@ -495,7 +496,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   prefix="$"
                   suffix="USD"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Cash, Savings, CDs, and other liquid equivalents.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Money-market accounts, savings accounts, CDs, and any cash you plan to have liquid at retirement. Held outside the market — protects you from being forced to sell investments at a loss early in retirement.</p>
               </div>
 
               <div>
@@ -506,7 +507,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   prefix="$"
                   suffix="USD"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Total value of Stocks, Bonds, ETFs, and Mutual Funds.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Combined value of all market-invested assets: 401(k), IRA, brokerage accounts, ETFs, and mutual funds. This is the portion of your savings exposed to market risk and long-term growth.</p>
               </div>
 
               <div>
@@ -517,7 +518,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   prefix="$"
                   suffix="/mo"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Estimated fixed income to automatically offset withdrawals.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Your estimated monthly benefit. Once you reach your claiming age, this amount reduces how much the simulation needs to withdraw from your portfolio each year — protecting your investments from being spent too fast.</p>
               </div>
 
               <div>
@@ -529,6 +530,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   value={formState.socialSecurityAge}
                   onChange={(e) => updateField('socialSecurityAge', parseInt(e.target.value) || 0)}
                 />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Social Security can be claimed from age 62 (reduced benefit) to age 70 (maximum benefit). Each year you delay past your Full Retirement Age adds roughly 8% to your monthly check.</p>
               </div>
             </div>
 
@@ -564,6 +566,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.timeHorizon} Years</span>
                 </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">How many years the simulation runs. A 30-year horizon covers retirement from age 65 to 95. Longer horizons stress-test your plan through more market cycles.</p>
               </div>
 
               {/* Inflation & Management Fee */}
@@ -574,6 +577,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   onChange={(v) => updateField('inflationRate', v)}
                   suffix="%"
                 />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">How fast prices rise each year on average. The simulation randomly varies inflation year-to-year around this figure (&#xb1;1.5% standard deviation). Long-run U.S. average: ~3%.</p>
               </div>
 
               <div>
@@ -583,7 +587,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   onChange={(v) => updateField('expectedStockReturn', v)}
                   suffix="%"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Average yearly growth of stocks before adjusting for inflation.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">The expected average annual return from your stock investments, before subtracting inflation (nominal return). The simulation adds realistic randomness — some years will be far above or below this target. Historical S&P 500 nominal average: ~10%.</p>
               </div>
 
               <div>
@@ -593,11 +597,12 @@ const SetupView: React.FC<SetupViewProps> = ({
                   onChange={(v) => updateField('managementFee', v)}
                   suffix="%"
                 />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Annual percentage fee on invested assets (stocks + bonds). Common range: 0.05% for index ETFs to 1.0% for actively managed funds. Deducted from your portfolio every year before withdrawals.</p>
               </div>
 
               {/* ── CPA / Tax Section ─────────────────────────────────── */}
               <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors mt-8">
-                Tax &amp; RMD
+                Tax &amp; Required Minimum Distributions (RMD)
               </h3>
 
               {/* Retirement Age */}
@@ -615,13 +620,13 @@ const SetupView: React.FC<SetupViewProps> = ({
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.currentAge} yrs</span>
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  RMDs are enforced automatically from age 73 (IRS Pub. 590-B).
+                  Your age at the start of retirement. RMDs begin at age 72 (born &le;1950), 73 (born 1951&ndash;1959), or 75 (born &ge;1960) per SECURE 2.0 / IRS Pub. 590-B &mdash; calculated automatically from your Birth Year.
                 </p>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                  Pre-Tax Savings %
+                  % Held in Pre-Tax Accounts (Traditional IRA / 401k)
                 </label>
                 <CurrencyInput
                   value={formState.taxDeferredRatio}
@@ -629,13 +634,13 @@ const SetupView: React.FC<SetupViewProps> = ({
                   suffix="%"
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  Percentage in Traditional 401(k)/IRA subject to Required Minimum Distributions (RMDs).
+                  What share of your portfolio sits in tax-deferred accounts (Traditional IRA, 401(k), 403(b)). Withdrawals from these accounts are taxed as ordinary income &mdash; the simulation grosses up your spending to cover the tax bill. The rest (Roth IRA, taxable brokerage) is treated as already-taxed.
                 </p>
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                  Estimated Tax Rate
+                  Effective Tax Rate on Pre-Tax Withdrawals
                 </label>
                 <CurrencyInput
                   value={formState.withdrawalTaxRate}
@@ -643,7 +648,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   suffix="%"
                 />
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  Your expected tax rate on withdrawals from pre-tax accounts.
+                  Your expected income tax rate on pre-tax account withdrawals. Only the pre-tax portion (set above) is taxed &mdash; e.g., if 60% is in a Traditional IRA and your rate is 22%, the blended drag is 13.2% of all withdrawals. Typical range: 10&ndash;32%.
                 </p>
               </div>
             </div>
@@ -671,7 +676,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileAverage}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Green line: The exact middle outcome (50% did better, 50% did worse).</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Green line: {formState.percentileAverage}% of runs ended below this line &mdash; {100 - formState.percentileAverage}% ended above. At P50 this is the median: the most likely single outcome for planning.</p>
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-below-avg-gold dark:text-amber-400 uppercase tracking-wider mb-2 transition-colors">
@@ -686,7 +691,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileBelowAverage}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Gold line: A sluggish market (e.g., bottom 25% of outcomes).</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Gold line: {formState.percentileBelowAverage}% of runs ended below this line. Shows a persistently sluggish market &mdash; good for conservative planning.</p>
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-downturn-red dark:text-red-400 uppercase tracking-wider mb-2 transition-colors">
@@ -701,7 +706,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   />
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-10 text-right transition-colors">P{formState.percentileDownturn}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Red line: A severe stress test (e.g., worst 10% of outcomes).</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 transition-colors">Red line: Only {formState.percentileDownturn}% of runs ended lower than this &mdash; {100 - formState.percentileDownturn}% survived better. If this line stays above $0, your plan is extremely resilient.</p>
               </div>
             </div>
           </div>
@@ -749,7 +754,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
               <h4 className="text-xs font-bold text-slate-900 dark:text-slate-200 mb-2 transition-colors">What is Monte Carlo?</h4>
               <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed transition-colors">
-                Instead of assuming a steady return (e.g., 7% every year), a Monte Carlo mathematically tests your plan against thousands of possible historical market rollercoasters. This helps identify the true probability of running out of money, giving both you and your CPA a realistic stress-tested view.
+                Instead of assuming a steady return every year, a Monte Carlo simulation runs your plan through 100,000 randomly generated future market paths &mdash; calibrated to long-term historical averages, but not tied to any specific historical sequence. This reveals the true probability of running out of money, not just a single optimistic estimate.
               </p>
             </div>
             <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-300">

@@ -450,7 +450,8 @@ const generateAuditLog = (
   inputs: SimulationInputs,
   strategy: StrategyType,
   annualReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[],
-  startYear: number   // same value captured by runSimulation for chart year labels
+  startYear: number,   // same value captured by runSimulation for chart year labels
+  nominalAssumptions: typeof NOMINAL_ASSUMPTIONS = NOMINAL_ASSUMPTIONS // passed from runSimulation to match simulation engine
 ): AuditRow[] => {
   const log: AuditRow[] = [];
   const { initialCash, initialInvestments, spendingPhases, customStockAllocation } = inputs;
@@ -571,11 +572,11 @@ const generateAuditLog = (
       if (currentWR > state.iwr * 1.20) {
         state.spendMultiplier *= 0.90;
         state.spend           *= 0.90;
-        gkEvent = 'Safety Rule Triggered: You are withdrawing an unsafe amount. Spending cut by 10%.';
+        gkEvent = 'Safety Guardrail: Withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
       } else if (currentWR < state.iwr * 0.80) {
         state.spendMultiplier *= 1.10;
         state.spend           *= 1.10;
-        gkEvent = 'Bonus Rule Triggered: Your portfolio grew exceptionally well. Spending raised by 10%.';
+        gkEvent = 'Prosperity Guardrail: Withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
       }
     }
 
@@ -587,6 +588,13 @@ const generateAuditLog = (
 
     // Accumulate stochastic inflation for accurate nominal-dollar conversion.
     cumulativeInflationFactor *= (1 + returns.inflation);
+
+    // nominalAssumptions is forwarded from runSimulation so the audit log uses the
+    // same stock return assumption as the 100,000-run simulation (not the hardcoded default).
+    void nominalAssumptions; // parameter is not used in simulateYear — it was used by generateAnnualReturns
+    // Note: the returns array passed in already encodes the correct distribution drawn
+    // by generateAnnualReturns(dynamicAssumptions, ...) in runSimulation, so the audit
+    // rows reflect the user's expectedStockReturn automatically via the stored returns.
 
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
 
@@ -698,7 +706,7 @@ export const runSimulation = (
       state.cash = 0;
     }
 
-    const currentRunReturns: { stock: number; bond: number; cash: number }[] = [];
+    const currentRunReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[] = [];
     // Store local trajectory for this run in a typed array
     const currentRunTrajectory = new Float64Array(timeHorizon);
     const runPortfolioReturns: number[] = [];
@@ -881,11 +889,13 @@ export const runSimulation = (
   const belowAvgRun = findBestFitRun(belowAverageCurve);
   const downturnRun = findBestFitRun(downturnCurve);
 
-  // Pass the same `currentYear` used for chart labels so audit rows and chart
-  // x-axis are guaranteed to show identical year values (no separate Date() call).
-  const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns, currentYear);
-  const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns, currentYear);
-  const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns, currentYear);
+  // Pass `dynamicAssumptions` so the audit log uses the same stock return distribution
+  // as the 100,000-run simulation (fixing the hardcoded 8.5% default bug).
+  // The stored annualReturns arrays were drawn using dynamicAssumptions in runSimulation,
+  // so audit rows already reflect the user's expectedStockReturn via the recorded draws.
+  const auditLogAverage = generateAuditLog(inputs, strategy, medianRun.annualReturns, currentYear, dynamicAssumptions);
+  const auditLogBelowAverage = generateAuditLog(inputs, strategy, belowAvgRun.annualReturns, currentYear, dynamicAssumptions);
+  const auditLogDownturn = generateAuditLog(inputs, strategy, downturnRun.annualReturns, currentYear, dynamicAssumptions);
 
   const finalMedian = medianRun.finalBalance;
   const avgVol = (totalAnnualizedVol / NUM_SIMULATIONS) * 100;

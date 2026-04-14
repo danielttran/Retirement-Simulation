@@ -477,7 +477,7 @@ ${auditSample}
 
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm transition-all duration-300">
                 <p className="text-[11px] font-semibold text-primary uppercase mb-2 tracking-wider">Simulation Core</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed transition-colors">Parametric model calibrated to long-term historical averages for variance modeling.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed transition-colors">Each of the 100,000 simulated futures draws random stock returns, bond returns, and inflation &mdash; correlated the way real markets behave, including rare crash events modeled at a 2% annual probability.</p>
               </div>
 
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm transition-all duration-300">
@@ -652,21 +652,21 @@ ${auditSample}
                 </h4>
                 <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6 transition-colors">
                   <div>
-                    <span className="block font-bold text-growth-green text-xs mb-1">Average Market — P{inputs.percentileAverage} (Green)</span>
+                    <span className="block font-bold text-growth-green text-xs mb-1">Average Market &mdash; P{inputs.percentileAverage} (Green)</span>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      The {inputs.percentileAverage}th-percentile outcome: {inputs.percentileAverage}% of the 100,000 runs finished below this line. This is your baseline planning target for normal market conditions.
+                      This line is the P{inputs.percentileAverage} outcome &mdash; {inputs.percentileAverage}% of the 100,000 simulated futures ended below this value, and {100 - inputs.percentileAverage}% ended above it. Use as your primary planning baseline.
                     </p>
                   </div>
                   <div>
-                    <span className="block font-bold text-below-avg-gold text-xs mb-1">Below Average — P{inputs.percentileBelowAverage} (Gold)</span>
+                    <span className="block font-bold text-below-avg-gold text-xs mb-1">Below Average &mdash; P{inputs.percentileBelowAverage} (Gold)</span>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      The {inputs.percentileBelowAverage}th-percentile outcome. Shows a sluggish market where growth is consistently below historical averages. Good for conservative planning.
+                      This line is the P{inputs.percentileBelowAverage} outcome &mdash; only {inputs.percentileBelowAverage}% of simulations ended lower than this. Shows a persistently slow-growth market. Good for conservative planning.
                     </p>
                   </div>
                   <div>
-                    <span className="block font-bold text-downturn-red text-xs mb-1">Downturn — P{inputs.percentileDownturn} (Red)</span>
+                    <span className="block font-bold text-downturn-red text-xs mb-1">Downturn &mdash; P{inputs.percentileDownturn} (Red)</span>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      The {inputs.percentileDownturn}th-percentile stress test. Only {inputs.percentileDownturn}% of runs were worse than this. If this line stays above $0, your plan is highly resilient.
+                      This is the worst P{inputs.percentileDownturn} stress test &mdash; only {inputs.percentileDownturn}% of all simulations ended worse than this line. {100 - inputs.percentileDownturn}% survived better. If this line stays above $0, your plan is extremely resilient.
                     </p>
                   </div>
                 </div>
@@ -744,19 +744,19 @@ ${auditSample}
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">shield</span>Capital Preservation
                       </span>
-                      <span>Safety Rule: You started withdrawing an unsafe shrinking percentage of your total money. Spending was successfully cut by 10% to protect you from running out.</span>
+                      <span>Safety Guardrail Triggered: Your withdrawal rate exceeded 120% of the rate you started with &mdash; meaning your portfolio is shrinking faster than your spending justifies. Spending was automatically reduced by 10% to extend your portfolio&apos;s life.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">trending_up</span>Prosperity Rule
                       </span>
-                      <span>Bonus Rule: Your investments grew faster than expected, making your withdrawals a very safe small percentage. Spending was safely raised by 10%!</span>
+                      <span>Prosperity Guardrail Triggered: Your withdrawal rate dropped below 80% of the starting rate &mdash; your portfolio is very healthy. Spending was safely raised by 10%!</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">verified</span>RMD: $X (met)
                       </span>
-                      <span>Required Minimum Distribution (RMD): IRS rules require you to take at least this much out of your pre-tax retirement accounts.</span>
+                      <span>Required Minimum Distribution (RMD): IRS rules (SECURE 2.0 / Pub. 590-B) require a minimum annual withdrawal from Traditional 401(k) and IRA accounts once you reach your RMD age. If your living expenses are less than the RMD, the RMD becomes your withdrawal floor for that year &mdash; and you owe income tax on the full RMD amount.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0">GK Multiplier &times;X.XXX</span>
@@ -798,7 +798,7 @@ ${auditSample}
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
                           Guardrail &amp; Strategy Action
-                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Rules safely keeping plan afloat</div>
+                          <div className="text-[9px] text-slate-400 dark:text-slate-500 normal-case font-normal tracking-normal mt-0.5">Automatic spending adjustments + rebalancing actions</div>
                         </th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">
                           Withdrawal (today's $)
@@ -899,12 +899,12 @@ ${auditSample}
                                 is never confused with the mechanical strategy action below it. */}
                             {row.gkEvent && (
                               <div className={`mb-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${
-                                row.gkEvent.startsWith('Capital')
+                                row.gkEvent.startsWith('Safety')
                                   ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
                                   : 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
                               }`}>
                                 <span className="material-symbols-outlined text-xs leading-none">
-                                  {row.gkEvent.startsWith('Capital') ? 'shield' : 'trending_up'}
+                                  {row.gkEvent.startsWith('Safety') ? 'shield' : 'trending_up'}
                                 </span>
                                 {row.gkEvent}
                               </div>
@@ -995,25 +995,25 @@ ${auditSample}
                 <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : 'text-amber-600 dark:text-amber-500'}`}>
                   <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : 'Monitor Closely'}
                 </span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of simulations where portfolio &gt; $0 at end of term.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of the 100,000 simulations where the portfolio never ran dry at any point during the {inputs.timeHorizon}-year period &mdash; not just at the end.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
-                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Expected Final Value</span>
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Median Final Portfolio Value</span>
                 <span className="text-2xl font-bold text-average-blue dark:text-blue-400 transition-colors">{formatCurrency(results.finalMedianValue)}</span>
-                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Real Dollars (Today's Purchasing Power)</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">The median projected purchasing power in {startYear + inputs.timeHorizon}. Adjusted for inflation.</p>
+                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Real dollars (today's purchasing power) &mdash; inflation-adjusted.</span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">The middle projected portfolio value in {startYear + inputs.timeHorizon}. Half of all 100,000 simulations ended above this amount; half ended below. Expressed in today's purchasing power.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Projected Volatility</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{results.volatility.toFixed(1)}%</span>
                 <span className="text-xs text-amber-600 dark:text-amber-500 font-bold mt-1">Annualized</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Typical annual swing in portfolio value based on this strategy.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Annualized standard deviation of portfolio returns across all 100,000 simulations. A higher number means wider year-to-year swings. For context, the S&amp;P 500's long-run volatility is ~17%.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Initial Spend Rate</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{((inputs.spendingPhases[0].annualSpend / (inputs.initialCash + inputs.initialInvestments)) * 100).toFixed(2)}%</span>
                 <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Pre-tax, before SS &amp; G-K adjustments</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Nominal annual spend ÷ total portfolio. Actual rate adjusts via Guyton-Klinger guardrails. Benchmark: 3.5–4.0%.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">First-year spending &divide; total portfolio, both in today's dollars. Your actual withdrawal rate shifts every year via Safety and Bonus guardrails. Target benchmark for a 30-year horizon: 3.5&ndash;4.5%.</p>
               </div>
             </div>
 
@@ -1034,17 +1034,17 @@ ${auditSample}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-3 text-xs">
                   {([
                     { label: 'Inflation Volatility', value: '1.5% std dev', note: `Annual fluctuation jumping up or down around your expected average of ${inputs.inflationRate}%` },
-                    { label: 'Market Relationships', value: '−0.30 Correlation', note: 'If stocks crash, inflation often drops slightly at the same time' },
+                    { label: 'Market Relationships', value: '\u22120.30 Correlation', note: 'When stocks have a bad year, inflation tends to be slightly lower (e.g., during recessions). The simulation models this with a \u22120.30 correlation between stock returns and inflation draws.' },
                     { label: 'Market Crash Probability', value: '2% / year', note: 'A black-swan event; about a 55% chance of occurring over a 40-year lifetime' },
-                    { label: 'Crash Severity', value: '20–40% drop', note: 'Suddenly slashes the value of stocks for that specific year on top of normal market swings' },
-                    { label: 'Safety Guardrail', value: 'Overspending → −10%', note: 'Cuts spending by 10% if your balance drops dangerously low compared to your initial rate' },
-                    { label: 'Bonus Guardrail', value: 'Excess growth → +10%', note: 'Raises spending by 10% if the market booms and your withdrawal rate becomes extremely small' },
-                    { label: 'Rebalancing Limit', value: '±5% of target mix', note: 'We only force a costly trade if your mix wanders too far off target' },
+                    { label: 'Crash Severity', value: '20\u201340% drop', note: 'Suddenly slashes the value of stocks for that specific year on top of normal market swings' },
+                    { label: 'Safety Guardrail (Guyton-Klinger)', value: 'Overspending \u2192 \u221210%', note: 'Cuts spending by 10% if your withdrawal rate rises above 120% of the starting rate' },
+                    { label: 'Prosperity Guardrail (Guyton-Klinger)', value: 'Excess growth \u2192 +10%', note: 'Raises spending by 10% if your withdrawal rate falls below 80% of the starting rate' },
+                    { label: 'Rebalancing Limit', value: '\u00b15% of target mix', note: 'We only force a costly trade if your mix wanders too far off target' },
                     { label: 'Fees & Costs', value: `${inputs.managementFee}% Mgt + 0.05% Trade`, note: `Your ${inputs.managementFee}% yearly management fee plus 0.05% friction cost applied whenever selling or buying` },
-                    { label: 'Required Distribution (RMD)', value: 'IRS Uniform Lifetime', note: 'Follows SECURE 2.0 withdrawal rules (starts at age 72, 73, or 75 depending on birth year)' },
+                    { label: 'Required Distribution (RMD)', value: 'IRS Uniform Lifetime', note: 'Follows SECURE 2.0 / IRS Pub.\u00a0590-B: age 72 (born \u22641950), age 73 (born 1951\u20131959), age 75 (born \u22651960). The simulation uses your Birth Year to set the exact threshold.' },
                     { label: 'Simulations Run', value: '100,000', note: 'Mathematically stress tests every possible future path based on your exact start numbers' },
-                    { label: 'Value Display', value: 'Real (Today\'s $)', note: 'Everything is shown in today\'s purchasing power so you understand true buying power' },
-                    { label: 'Stock Math', value: 'Log-normal Engine', note: `Calculates random ranges that match your expected ${inputs.expectedStockReturn}% return with historical exactness` },
+                    { label: 'Value Display', value: "Real (Today's $)", note: "Everything is shown in today's purchasing power so you understand true buying power" },
+                    { label: 'Stock Math', value: 'Log-normal Engine', note: `Generates realistic random annual returns centered on your ${inputs.expectedStockReturn}% target, with year-to-year randomness matching the statistical shape of historical equity markets (log-normal, \u03c3=17%).` },
                   ] as { label: string; value: string; note: string }[]).map(({ label, value, note }) => (
                     <div key={label} className="flex flex-col gap-0.5">
                       <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{label}</span>
