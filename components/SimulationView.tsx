@@ -77,7 +77,10 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const [auditMode, setAuditMode] = useState(false);
   const [auditScenario, setAuditScenario] = useState<'AVERAGE' | 'BELOW' | 'DOWNTURN'>('BELOW');
 
-  const startYear = new Date().getFullYear();
+  // Use the year stamped on the simulation data rather than the current clock so
+  // that chart x-axis, audit row year labels, and "X years away" offsets are all
+  // consistent even if the component renders after a calendar-year boundary.
+  const startYear = results.data.length > 0 ? results.data[0].year : new Date().getFullYear();
   const runTime = new Date(results.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   const formatCurrency = (val: number) => {
@@ -206,23 +209,25 @@ const SimulationView: React.FC<SimulationViewProps> = ({
 
     return dataToUse.map(d => {
       const newD = { ...d };
-      // Average
+
+      // "Disappearing line" effect: first zero shows as 0 (line touches the axis),
+      // every subsequent zero shows as null (Recharts leaves a gap).
+      // Depletion is PERMANENT in this model, so the flags must never reset to
+      // false — the removed `else` branches prevented floating-point noise from
+      // briefly producing a tiny positive value that would re-enable the zero
+      // display and cause a spurious line re-appearance.
       if (d.average <= 0) {
         newD.average = avgDepleted ? null : 0;
         avgDepleted = true;
-      } else { avgDepleted = false; }
-
-      // Below Average
+      }
       if (d.belowAverage <= 0) {
         newD.belowAverage = belowDepleted ? null : 0;
         belowDepleted = true;
-      } else { belowDepleted = false; }
-
-      // Downturn
+      }
       if (d.downturn <= 0) {
         newD.downturn = downDepleted ? null : 0;
         downDepleted = true;
-      } else { downDepleted = false; }
+      }
 
       return newD;
     });

@@ -656,9 +656,13 @@ export const runSimulation = (
   // not corrupt the row-major `allRuns[j].trajectory` arrays used by findBestFitRun.
   for (let i = 0; i < timeHorizon; i++) {
     const yearValues = trajectoryColumns[i].sort();
-    downturnCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.10)]);
-    belowAverageCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.25)]);
-    averageCurve.push(yearValues[Math.floor(NUM_SIMULATIONS * 0.50)]);
+    // Nearest-rank percentile: index = ceil(N × p) − 1 (0-based).
+    // Math.floor(N × p) gives index 1000 for p=0.10, N=10000 — that is the
+    // 1001st value (10.01th percentile).  Subtracting 1 from the ceiling
+    // gives index 999 — exactly the 1000th value (10.00th percentile).
+    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.10) - 1]);
+    belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.25) - 1]);
+    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * 0.50) - 1]);
   }
 
   const chartData: YearResult[] = averageCurve.map((val, idx) => ({

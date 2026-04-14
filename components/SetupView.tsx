@@ -401,6 +401,8 @@ const SetupView: React.FC<SetupViewProps> = ({
       errors.push('Tax-deferred ratio must be 0–100%.');
     if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 50)
       errors.push('Withdrawal tax rate must be 0–50%.');
+    if (formState.socialSecurityAge < 50 || formState.socialSecurityAge > 85)
+      errors.push('Social Security / pension claiming age must be between 50 and 85.');
 
     const phases = formState.spendingPhases;
     if (phases.length === 0) {
