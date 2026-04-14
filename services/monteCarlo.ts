@@ -404,10 +404,16 @@ const generateAuditLog = (
     // --- RMD & Tax Gross-Up ---
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
     const ageThisYear = inputs.currentAge + year;
-    
+
+    // Capture SS/pension income before deducting it from baseSpend so we can
+    // report the offset explicitly in the audit row (ssIncome column).
+    const ssIncomeThisYear = ageThisYear >= inputs.socialSecurityAge
+      ? inputs.socialSecurityIncome * 12
+      : 0;
+
     // Supplemental Income offsets need for portfolio withdrawals
-    if (ageThisYear >= inputs.socialSecurityAge) {
-      baseSpend -= inputs.socialSecurityIncome * 12;
+    if (ssIncomeThisYear > 0) {
+      baseSpend -= ssIncomeThisYear;
     }
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
@@ -460,6 +466,7 @@ const generateAuditLog = (
       endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
       rmdAmount,
       nominalWithdrawal,
+      ssIncome: ssIncomeThisYear,
     });
 
     state = outcome.nextState;

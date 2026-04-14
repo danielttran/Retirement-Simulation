@@ -579,6 +579,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Growth</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-amber-600 dark:text-amber-500">Fees</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 w-1/4">Strategy Action</th>
+                        <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-emerald-600 dark:text-emerald-500">SS / Pension</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">Withdrawal</th>
                         <th className="px-4 py-4 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200">End Balance</th>
                       </tr>
@@ -626,6 +627,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({
                           </td>
                           <td className="px-4 py-4 text-xs font-medium text-slate-700 dark:text-slate-400 leading-relaxed transition-colors">
                             {row.action}
+                          </td>
+                          <td className="px-4 py-4 font-medium transition-colors">
+                            {row.ssIncome > 0 ? (
+                              <div className="text-emerald-600 dark:text-emerald-500 font-bold">
+                                +${row.ssIncome.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            ) : (
+                              <div className="text-slate-300 dark:text-slate-600">—</div>
+                            )}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
                             {row.withdrawal - row.taxPaid < 0 ? (
