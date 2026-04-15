@@ -556,6 +556,12 @@ const generateAuditLog = (
   // planned INCREASE triggers an immediate Safety cut (CWR >> IWR × 120%).
   let prevRawPhaseSpend = initialSpend;
 
+  // Guyton-Klinger requires checking the PRIOR year's portfolio return direction.
+  // Safety only fires after a negative year; Prosperity only fires after a positive year.
+  // (Guyton 2004 / Klinger 2006: "Capital Preservation Rule applies in years when the
+  // prior calendar year portfolio return was negative.")
+  let prevYearStockReturn = 0;
+
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
@@ -630,7 +636,9 @@ const generateAuditLog = (
       state.iwr             = currentWR;
       state.gkFiredLastYear = false;
     } else if (state.iwr > 0.0001) {
-      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR) {
+      // Per the original G-K paper (Guyton 2004 / Klinger 2006), Safety fires only when the
+      // prior year's portfolio return was negative, and Prosperity only when it was positive.
+      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearStockReturn < 0) {
         // Safety: portfolio shrinking faster than sustainable — cut spending.
         const newMult    = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
         const factor     = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
@@ -641,7 +649,7 @@ const generateAuditLog = (
           ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
           : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
         state.gkFiredLastYear = true;
-      } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING) {
+      } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
         // Prosperity: portfolio very healthy — allow a spending raise.
         const newMult    = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
         const factor     = newMult / state.spendMultiplier;
@@ -710,6 +718,7 @@ const generateAuditLog = (
     });
 
     state = outcome.nextState;
+    prevYearStockReturn = returns.stock;
   }
   return log;
 };
@@ -804,6 +813,7 @@ export const runSimulation = (
     let prevRawPhaseSpend = initialSpend;
 
     let prevBalance = totalStartPortfolio;
+    let prevYearStockReturn = 0;
 
     for (let year = 0; year < timeHorizon; year++) {
       // Update spend for the current phase before simulateYear consumes state.spend
@@ -861,14 +871,14 @@ export const runSimulation = (
         state.iwr             = currentWR;
         state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
-        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR) {
+        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearStockReturn < 0) {
           const newMult         = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend          *= factor;
           taxOwed               = state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
-        } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING) {
+        } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
           const newMult         = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
@@ -901,6 +911,7 @@ export const runSimulation = (
       currentRunTrajectory[year] = totalPortfolio;
       trajectoryColumns[year][sim] = totalPortfolio;
       prevBalance = totalPortfolio;
+      prevYearStockReturn = returns.stock;
     }
 
     const finalVal = state.stock + state.bond + state.cash;
