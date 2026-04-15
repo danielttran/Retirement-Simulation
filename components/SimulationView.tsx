@@ -941,12 +941,14 @@ ${auditSample}
                             </div>
                             {row.rmdAmount > 0 && (
                               <div className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide ${
-                                Math.abs(row.withdrawal - row.rmdAmount) < 1
-                                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
-                                  : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                                row.withdrawal >= row.rmdAmount - 1
+                                  ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                                  : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
                               }`}>
-                                <span className="material-symbols-outlined text-xs leading-none">verified</span>
-                                RMD: ${row.rmdAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} (met)
+                                <span className="material-symbols-outlined text-xs leading-none">
+                                  {row.withdrawal >= row.rmdAmount - 1 ? 'verified' : 'warning'}
+                                </span>
+                                RMD: ${row.rmdAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} {row.withdrawal >= row.rmdAmount - 1 ? '(met)' : '(VIOLATION)'}
                                 {Math.abs(row.withdrawal - row.rmdAmount) < 1 && (
                                   <span className="ml-1 normal-case font-normal">— forced ↑</span>
                                 )}
