@@ -75,12 +75,16 @@ function computeFirstYearGrossedUpSpend(
   const ageAtYear1 = inputs.currentAge + 1;
   let baseSpend = rawSpend;
 
-  if (ageAtYear1 >= inputs.socialSecurityAge) {
-    baseSpend -= inputs.socialSecurityIncome * 12;
-  }
-
   const taxRate = inputs.withdrawalTaxRate / 100;
   const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
+
+  if (ageAtYear1 >= inputs.socialSecurityAge) {
+    // Bug 5 fix: SS income is not 100% tax-free for high-income retirees.
+    // Only the after-tax portion of SS offsets the portfolio withdrawal need;
+    // the tax on SS benefits (at the user's withdrawalTaxRate) must still come
+    // from the portfolio. Equivalent to: baseSpend -= SS * (1 - taxRate).
+    baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate);
+  }
   const rmdAmount = computeRMD(portfolioBalance, ageAtYear1, inputs.taxDeferredRatio, inputs.birthYear);
 
   // Mirror the simulation loop's RMD-aware gross-up exactly:
@@ -506,6 +510,11 @@ const generateAuditLog = (
     gkFiredLastYear: false,
   };
 
+  // Bug 3 fix: capture the one-time setup friction so Year 1 of the audit log can
+  // surface it as an explicit fee. Without this, the starting balance appears lower
+  // than the user's input with no corresponding fees entry — "vanishing money".
+  let initialSetupCost = 0;
+
   if (strategy === 'BUCKET') {
     // Mirror of runSimulation initial state — use grossed-up spend so the
     // initial cash buffer matches what simulateYear targets in year 1.
@@ -539,6 +548,7 @@ const generateAuditLog = (
     const targetBondAmt = totalStartPortfolio * targetBondWeight;
     const tradeVolume = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
     const setupCost = tradeVolume * TRANSACTION_COST;
+    initialSetupCost = setupCost;
     const effectiveTotal = totalStartPortfolio - setupCost;
     state.stock = effectiveTotal * targetStockWeight;
     state.bond = effectiveTotal * targetBondWeight;
@@ -594,13 +604,19 @@ const generateAuditLog = (
     prevSsIncomeActive = ssIncomeThisYear > 0;
     const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
 
-    if (ssIncomeThisYear > 0) baseSpend -= ssIncomeThisYear;
+    const taxRate    = inputs.withdrawalTaxRate / 100;
+    const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
+
+    if (ssIncomeThisYear > 0) {
+      // Bug 5 fix: SS income is not 100% tax-free for high-income retirees.
+      // Only the after-tax portion offsets the portfolio withdrawal need; the tax
+      // on SS (at withdrawalTaxRate) must still come from the portfolio.
+      // Equivalent to: baseSpend -= ssIncomeThisYear * (1 - taxRate).
+      baseSpend -= ssIncomeThisYear * (1 - taxRate);
+    }
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
-
-    const taxRate    = inputs.withdrawalTaxRate / 100;
-    const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
     // BUG FIX: Apply the accumulated G-K multiplier BEFORE computing taxOwed so
     // the tax gross-up reflects the actual (already-adjusted) spending need, not
@@ -658,6 +674,10 @@ const generateAuditLog = (
         const factor     = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
         state.spendMultiplier = newMult;
         state.spend      *= factor;
+        // Bug 1 fix: the GK 10% cut must never push spending below the IRS RMD floor.
+        // Without this guard, an RMD-spiked CWR triggers Safety, and the 0.90 multiplier
+        // then cuts the actual withdrawal below the legal minimum distribution.
+        state.spend       = Math.max(state.spend, rmdAmount);
         // When the RMD is the withdrawal floor, tax = spend × marginal rate (full pre-tax draw).
         // In the normal gross-up path, tax = spend − before-tax-spend = the gross-up wedge.
         taxOwed = rmdAmount > grossBaseSpend
@@ -667,8 +687,10 @@ const generateAuditLog = (
           ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
           : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
         state.gkFiredLastYear = true;
-      } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
+      } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
         // Prosperity: portfolio very healthy — allow a spending raise.
+        // Bug 4 fix: guard currentWR > 0 so a depleted portfolio (CWR = 0) cannot
+        // trigger an endless chain of 10% raises on non-existent money.
         const newMult    = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
         const factor     = newMult / state.spendMultiplier;
         state.spendMultiplier = newMult;
@@ -717,14 +739,18 @@ const generateAuditLog = (
     log.push({
       year: startYear + year,
       startCash,
-      startStock,
+      // Bug 3 fix: In Year 1, add the setup friction back to startStock so the
+      // logged start balance equals the user's original input portfolio. The matching
+      // initialSetupCost is added to feesAmount below so the audit math
+      // (Start + Growth − Fees − Draw = End) still balances exactly.
+      startStock: year === 1 ? startStock + initialSetupCost : startStock,
       startBond,
       stockReturn:       returns.stock,
       bondReturn:        returns.bond,
       cashReturn:        returns.cash,
       realizedInflation: returns.inflation,
       growthAmount:      outcome.growth,
-      feesAmount:        outcome.fees,
+      feesAmount:        outcome.fees + (year === 1 ? initialSetupCost : 0),
       action:            outcome.actionLog, // strategy-only mechanical action
       gkEvent,                              // G-K event isolated for styled badge rendering
       withdrawal:        outcome.withdrawal,
@@ -857,16 +883,20 @@ export const runSimulation = (
       prevSsIncomeActive = ssActive;
       const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
 
-      if (ssActive) {
-        baseSpend -= inputs.socialSecurityIncome * 12;
-      }
-
-      const totalPreWithdrawal = state.stock + state.bond + state.cash;
-      const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
       // Blended effective tax rate: only the fraction held in tax-deferred accounts
       // is taxable on withdrawal. See generateAuditLog for the identical derivation.
       const taxRate = inputs.withdrawalTaxRate / 100;
       const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
+
+      if (ssActive) {
+        // Bug 5 fix: SS income is not 100% tax-free for high-income retirees.
+        // Only the after-tax portion offsets the portfolio withdrawal need; the tax
+        // on SS (at withdrawalTaxRate) must still come from the portfolio.
+        baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate);
+      }
+
+      const totalPreWithdrawal = state.stock + state.bond + state.cash;
+      const rmdThisYear = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
 
       // Apply G-K multiplier BEFORE tax so gross-up is on the adjusted spend amount.
       baseSpend *= state.spendMultiplier;
@@ -903,11 +933,15 @@ export const runSimulation = (
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend          *= factor;
+          // Bug 1 fix: never cut spending below the IRS RMD floor.
+          state.spend           = Math.max(state.spend, rmdThisYear);
           taxOwed = rmdThisYear > grossBaseSpend
             ? state.spend * taxRate
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
-        } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
+        } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
+          // Bug 4 fix: currentWR > 0 prevents a depleted portfolio from triggering
+          // an endless loop of 10% raises (CWR = 0 always satisfies < 0.80 × IWR).
           const newMult         = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
