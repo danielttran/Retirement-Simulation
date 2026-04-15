@@ -562,13 +562,20 @@ const generateAuditLog = (
   // prior calendar year portfolio return was negative.")
   let prevYearStockReturn = 0;
 
+  // Track when SS income first activates so we can reset the G-K IWR baseline.
+  // Without this reset, the first year of SS causes a sharp drop in net portfolio
+  // withdrawals → CWR << 0.8 × IWR → Prosperity guardrail fires repeatedly,
+  // compounding spending raises up to the 1.25 ceiling purely because SS offset
+  // made the CWR look artificially low — not because the portfolio is healthy.
+  let prevSsIncomeActive = false;
+
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
     // Capture raw phase spend BEFORE SS / multiplier modifications for phase-change detection.
-    const rawPhaseSpend       = baseSpend;
-    const isPhaseTransition   = year > 1 && rawPhaseSpend !== prevRawPhaseSpend;
-    prevRawPhaseSpend         = rawPhaseSpend;
+    const rawPhaseSpend   = baseSpend;
+    const phaseChanged    = year > 1 && rawPhaseSpend !== prevRawPhaseSpend;
+    prevRawPhaseSpend     = rawPhaseSpend;
 
     // --- RMD & Tax Gross-Up ---
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
@@ -579,6 +586,13 @@ const generateAuditLog = (
     const ssIncomeThisYear = ageThisYear >= inputs.socialSecurityAge
       ? inputs.socialSecurityIncome * 12
       : 0;
+
+    // Detect the first year SS income becomes active; treat it as an IWR reset
+    // event (same as a spending phase transition) so the G-K baseline reflects
+    // the new, lower net withdrawal need rather than the pre-SS portfolio draw.
+    const ssIncomeJustActivated = !prevSsIncomeActive && ssIncomeThisYear > 0;
+    prevSsIncomeActive = ssIncomeThisYear > 0;
+    const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
 
     if (ssIncomeThisYear > 0) baseSpend -= ssIncomeThisYear;
 
@@ -644,7 +658,11 @@ const generateAuditLog = (
         const factor     = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
         state.spendMultiplier = newMult;
         state.spend      *= factor;
-        taxOwed           = state.spend - Math.max(0, baseSpend * factor);
+        // When the RMD is the withdrawal floor, tax = spend × marginal rate (full pre-tax draw).
+        // In the normal gross-up path, tax = spend − before-tax-spend = the gross-up wedge.
+        taxOwed = rmdAmount > grossBaseSpend
+          ? state.spend * taxRate
+          : state.spend - Math.max(0, baseSpend * factor);
         gkEvent = newMult === GK_FLOOR
           ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
           : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
@@ -655,7 +673,9 @@ const generateAuditLog = (
         const factor     = newMult / state.spendMultiplier;
         state.spendMultiplier = newMult;
         state.spend      *= factor;
-        taxOwed           = state.spend - Math.max(0, baseSpend * factor);
+        taxOwed = rmdAmount > grossBaseSpend
+          ? state.spend * taxRate
+          : state.spend - Math.max(0, baseSpend * factor);
         gkEvent = newMult === GK_CEILING
           ? 'Prosperity Guardrail (ceiling): Spending raise reached the 25% maximum increase — no further raises will be applied.'
           : 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
@@ -814,23 +834,30 @@ export const runSimulation = (
 
     let prevBalance = totalStartPortfolio;
     let prevYearStockReturn = 0;
+    let prevSsIncomeActive = false;
 
     for (let year = 0; year < timeHorizon; year++) {
       // Update spend for the current phase before simulateYear consumes state.spend
       let baseSpend = getSpendingForYear(year, spendingPhases);
       // Detect spending phase transitions (mirrors generateAuditLog logic).
-      const rawPhaseSpend     = baseSpend;
-      const isPhaseTransition = year > 0 && rawPhaseSpend !== prevRawPhaseSpend;
-      prevRawPhaseSpend       = rawPhaseSpend;
+      const rawPhaseSpend  = baseSpend;
+      const phaseChanged   = year > 0 && rawPhaseSpend !== prevRawPhaseSpend;
+      prevRawPhaseSpend    = rawPhaseSpend;
 
       // --- RMD & Tax Gross-Up (mirrors generateAuditLog logic exactly) ---
       // year is 0-based here; add 1 to align with the 1-based convention in
       // generateAuditLog so both functions compute the same IRS age for the
       // same retirement year (avoids a 1-year RMD trigger discrepancy).
       const ageThisYear = inputs.currentAge + year + 1;
-      
-      // Supplemental Income offsets need for portfolio withdrawals
-      if (ageThisYear >= inputs.socialSecurityAge) {
+
+      // Supplemental Income offsets need for portfolio withdrawals.
+      // Also detect first SS activation for G-K IWR baseline reset (mirrors generateAuditLog).
+      const ssActive = ageThisYear >= inputs.socialSecurityAge;
+      const ssIncomeJustActivated = !prevSsIncomeActive && ssActive;
+      prevSsIncomeActive = ssActive;
+      const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
+
+      if (ssActive) {
         baseSpend -= inputs.socialSecurityIncome * 12;
       }
 
@@ -876,14 +903,18 @@ export const runSimulation = (
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend          *= factor;
-          taxOwed               = state.spend - Math.max(0, baseSpend * factor);
+          taxOwed = rmdThisYear > grossBaseSpend
+            ? state.spend * taxRate
+            : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
         } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
           const newMult         = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend          *= factor;
-          taxOwed               = state.spend - Math.max(0, baseSpend * factor);
+          taxOwed = rmdThisYear > grossBaseSpend
+            ? state.spend * taxRate
+            : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
         } else {
           state.gkFiredLastYear = false;
@@ -971,11 +1002,16 @@ export const runSimulation = (
     averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pAvg)   - 1]);
   }
 
+  // Map $0 trajectories to null so Recharts renders a gap at depletion
+  // (connectNulls={false}) instead of a misleading flatline at $0.
+  // The YearResult type uses `number | null` precisely for this purpose.
+  const toNullable = (v: number): number | null => v <= 0 ? null : v;
+
   const chartData: YearResult[] = averageCurve.map((val, idx) => ({
     year: currentYear + idx + 1,
-    average: val,
-    belowAverage: belowAverageCurve[idx],
-    downturn: downturnCurve[idx]
+    average:      toNullable(val),
+    belowAverage: toNullable(belowAverageCurve[idx]),
+    downturn:     toNullable(downturnCurve[idx]),
   }));
 
   chartData.unshift({
