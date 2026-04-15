@@ -146,7 +146,7 @@ ${auditSample}
     const abs = Math.abs(val);
     if (abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(1)}M`;
     if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
-    return `${sign}$${abs}`;
+    return `${sign}$${Math.round(abs).toLocaleString()}`;
   };
 
   const getStrategyName = (s: StrategyType) => {
@@ -988,8 +988,8 @@ ${auditSample}
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Success Probability</span>
                 <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{results.successRate.toFixed(1)}%</span>
-                <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : 'text-amber-600 dark:text-amber-500'}`}>
-                  <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : 'Monitor Closely'}
+                <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                  <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : results.successRate > 75 ? 'Monitor Closely' : 'At Risk'}
                 </span>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of the 100,000 simulations where the portfolio balance never fell to $1 or below at any point during the {inputs.timeHorizon}-year period &mdash; not just at the end. A single year of depletion counts as failure even if later income temporarily restored the balance.</p>
               </div>
