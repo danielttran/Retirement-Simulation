@@ -37,7 +37,7 @@ function computeRMD(realBalance: number, age: number, taxDeferredRatio: number, 
   if (taxDeferredRatio <= 0) return 0;
   
   let threshold = 73; // Default SECURE 2.0
-  if (birthYear <= 1950) threshold = 72;
+  if (birthYear <= 1950) threshold = 72;  // born ≤ 1950: attains 72 before Jan 1 2023 → pre-SECURE 2.0 age-72 rule
   else if (birthYear >= 1960) threshold = 75;
 
   if (age < threshold) return 0;
@@ -74,22 +74,19 @@ function computeFirstYearGrossedUpSpend(
   const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
   const rmdAmount = computeRMD(portfolioBalance, ageAtYear1, inputs.taxDeferredRatio, inputs.birthYear);
 
-  let taxOwed = 0;
+  // Mirror the simulation loop's RMD-aware gross-up exactly:
+  // if rmdAmount > grossed-up spend → the RMD is the portfolio withdrawal floor;
+  // otherwise → the normal gross-up spend is the withdrawal.
+  let grossBaseSpend = Math.max(0, baseSpend);
   if (baseSpend > 0) {
-    let grossBaseSpend = baseSpend;
     if (effTaxRate > 0 && effTaxRate < 1) {
       grossBaseSpend = baseSpend / (1 - effTaxRate);
     } else if (effTaxRate >= 1) {
       grossBaseSpend = portfolioBalance;
     }
-    const taxFromNeeds = grossBaseSpend - baseSpend;
-    const taxFromRMD = rmdAmount * taxRate;
-    taxOwed = Math.max(taxFromNeeds, taxFromRMD);
-  } else {
-    taxOwed = rmdAmount * taxRate;
   }
 
-  return baseSpend + taxOwed;
+  return rmdAmount > grossBaseSpend ? rmdAmount : grossBaseSpend;
 }
 
 // Nominal Return Assumptions (Long-term historical averages)
@@ -658,6 +655,10 @@ export const runSimulation = (
   inputs: SimulationInputs,
   strategy: StrategyType
 ): SimulationResult => {
+  // Reset Box-Muller cache so a leftover value from a prior run can't
+  // bleed into the first sample of this run.
+  randnCached = null;
+
   const { initialCash, initialInvestments, spendingPhases, timeHorizon, customStockAllocation, inflationRate } = inputs;
   const totalStartPortfolio = initialCash + initialInvestments;
 
