@@ -18,6 +18,15 @@ export function getSpendingForYear(year: number, phases: SpendingPhase[]): numbe
 
 const TRANSACTION_COST = 0.0005; // 0.05% friction on selling/rebalancing
 
+// Guyton-Klinger guardrail bounds.
+// The multiplier tracks accumulated G-K adjustments and is clamped to [GK_FLOOR, GK_CEILING].
+// Without a floor, consecutive safety fires (every other year) compound to a 65%+ spending
+// reduction over 20 years — far beyond what G-K was ever intended to produce.
+// 0.85 floor = spending can never drop more than 15% below the phase target.
+// 1.25 ceiling = spending can never rise more than 25% above the phase target.
+const GK_FLOOR    = 0.85;
+const GK_CEILING  = 1.25;
+
 // ---------------------------------------------------------------------------
 // RMD — IRS Uniform Lifetime Table (Publication 590-B, SECURE 2.0 / 2022+)
 // ---------------------------------------------------------------------------
@@ -529,9 +538,19 @@ const generateAuditLog = (
   // returns array) is more accurate than a fixed compound factor.
   let cumulativeInflationFactor = 1.0;
 
+  // Track the raw (pre-SS, pre-multiplier) phase spend so we can detect spending
+  // phase transitions and reset the G-K IWR baseline. Without this, a planned
+  // spending DROP triggers an immediate Prosperity raise (CWR << IWR × 80%), and a
+  // planned INCREASE triggers an immediate Safety cut (CWR >> IWR × 120%).
+  let prevRawPhaseSpend = initialSpend;
+
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
+    // Capture raw phase spend BEFORE SS / multiplier modifications for phase-change detection.
+    const rawPhaseSpend       = baseSpend;
+    const isPhaseTransition   = year > 1 && rawPhaseSpend !== prevRawPhaseSpend;
+    prevRawPhaseSpend         = rawPhaseSpend;
 
     // --- RMD & Tax Gross-Up ---
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
@@ -583,29 +602,43 @@ const generateAuditLog = (
 
     // --- Guyton-Klinger Guardrail Check ---
     // CWR uses totalPreWithdrawal (already computed above) — no duplicate calculation.
-    // A 1-year cooldown is enforced: if a guardrail fired last year, skip the check
-    // this year. This prevents back-to-back 10% cuts (or raises) that would otherwise
-    // spiral spending to near-zero in a prolonged downturn.
+    //
+    // Rules enforced:
+    //  • 1-year cooldown: no back-to-back adjustments (prevents every-other-year spiral).
+    //  • Floor / ceiling on spendMultiplier [GK_FLOOR, GK_CEILING]: spending can never
+    //    drop more than 15% below or rise more than 25% above the phase target.
+    //  • IWR resets at spending phase transitions so a planned spending change
+    //    (e.g. dropping from $50k to $25k in a later phase) does not immediately
+    //    trigger the wrong guardrail against the year-1 baseline.
     let gkEvent = '';
     const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
-    if (year === 1) {
-      state.iwr = currentWR; // Baseline IWR set in the first retirement year
+    if (year === 1 || isPhaseTransition) {
+      // Year 1 or new spending phase: establish / re-establish the G-K baseline.
+      state.iwr             = currentWR;
       state.gkFiredLastYear = false;
     } else if (state.iwr > 0.0001) {
-      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20) {
-        state.spendMultiplier *= 0.90;
-        state.spend           *= 0.90;
-        // Recalculate taxOwed from the post-G-K spend so audit row is accurate.
-        taxOwed = state.spend - Math.max(0, baseSpend * 0.90);
-        gkEvent = 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
+      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR) {
+        // Safety: portfolio shrinking faster than sustainable — cut spending.
+        const newMult    = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
+        const factor     = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
+        state.spendMultiplier = newMult;
+        state.spend      *= factor;
+        taxOwed           = state.spend - Math.max(0, baseSpend * factor);
+        gkEvent = newMult === GK_FLOOR
+          ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
+          : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
         state.gkFiredLastYear = true;
-      } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80) {
-        state.spendMultiplier *= 1.10;
-        state.spend           *= 1.10;
-        // Recalculate taxOwed from the post-G-K spend so audit row is accurate.
-        taxOwed = state.spend - Math.max(0, baseSpend * 1.10);
-        gkEvent = 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
+      } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING) {
+        // Prosperity: portfolio very healthy — allow a spending raise.
+        const newMult    = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
+        const factor     = newMult / state.spendMultiplier;
+        state.spendMultiplier = newMult;
+        state.spend      *= factor;
+        taxOwed           = state.spend - Math.max(0, baseSpend * factor);
+        gkEvent = newMult === GK_CEILING
+          ? 'Prosperity Guardrail (ceiling): Spending raise reached the 25% maximum increase — no further raises will be applied.'
+          : 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
         state.gkFiredLastYear = true;
       } else {
         state.gkFiredLastYear = false;
@@ -629,6 +662,13 @@ const generateAuditLog = (
     // rows reflect the user's expectedStockReturn automatically via the stored returns.
 
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
+
+    // When the portfolio is nearly depleted, simulateYear caps actualWithdrawal below
+    // state.spend. Scale taxOwed proportionally so the audit doesn't show more tax
+    // than the fraction of the withdrawal that actually occurred.
+    if (state.spend > 0.01 && outcome.withdrawal < state.spend - 0.01) {
+      taxOwed *= outcome.withdrawal / state.spend;
+    }
 
     // Nominal withdrawal uses the exact cumulative product of stochastic inflation
     // draws (not a fixed-rate approximation) for a precise 1099-R reference figure.
@@ -748,11 +788,18 @@ export const runSimulation = (
     const currentRunTrajectory = new Float64Array(timeHorizon);
     const runPortfolioReturns: number[] = [];
 
+    // Phase-transition tracking: mirrors generateAuditLog.
+    let prevRawPhaseSpend = initialSpend;
+
     let prevBalance = totalStartPortfolio;
 
     for (let year = 0; year < timeHorizon; year++) {
       // Update spend for the current phase before simulateYear consumes state.spend
       let baseSpend = getSpendingForYear(year, spendingPhases);
+      // Detect spending phase transitions (mirrors generateAuditLog logic).
+      const rawPhaseSpend     = baseSpend;
+      const isPhaseTransition = year > 0 && rawPhaseSpend !== prevRawPhaseSpend;
+      prevRawPhaseSpend       = rawPhaseSpend;
 
       // --- RMD & Tax Gross-Up (mirrors generateAuditLog logic exactly) ---
       // year is 0-based here; add 1 to align with the 1-based convention in
@@ -795,26 +842,26 @@ export const runSimulation = (
       }
 
       // --- Guyton-Klinger Guardrail Check ---
-      // totalPreWithdrawal is already computed above for the RMD calculation.
-      // Year 0 establishes the IWR; year 1+ may trigger adjustments.
-      // 1-year cooldown: skip if a guardrail fired last year (mirrors generateAuditLog).
+      // Mirrors generateAuditLog exactly: cooldown + floor/ceiling + phase-transition reset.
       const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
-      if (year === 0) {
-        state.iwr = currentWR;
+      if (year === 0 || isPhaseTransition) {
+        state.iwr             = currentWR;
         state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
-        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20) {
-          state.spendMultiplier *= 0.90;
-          state.spend           *= 0.90;
-          // Recalculate taxOwed from the post-G-K spend to keep totalPortfolio accounting accurate.
-          taxOwed = state.spend - Math.max(0, baseSpend * 0.90);
+        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR) {
+          const newMult         = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
+          const factor          = newMult / state.spendMultiplier;
+          state.spendMultiplier = newMult;
+          state.spend          *= factor;
+          taxOwed               = state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
-        } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80) {
-          state.spendMultiplier *= 1.10;
-          state.spend           *= 1.10;
-          // Recalculate taxOwed from the post-G-K spend to keep totalPortfolio accounting accurate.
-          taxOwed = state.spend - Math.max(0, baseSpend * 1.10);
+        } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING) {
+          const newMult         = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
+          const factor          = newMult / state.spendMultiplier;
+          state.spendMultiplier = newMult;
+          state.spend          *= factor;
+          taxOwed               = state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
         } else {
           state.gkFiredLastYear = false;
