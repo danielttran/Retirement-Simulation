@@ -566,11 +566,14 @@ const generateAuditLog = (
   // planned INCREASE triggers an immediate Safety cut (CWR >> IWR × 120%).
   let prevRawPhaseSpend = initialSpend;
 
-  // Guyton-Klinger requires checking the PRIOR year's portfolio return direction.
+  // Guyton-Klinger requires checking the PRIOR year's TOTAL PORTFOLIO return direction.
   // Safety only fires after a negative year; Prosperity only fires after a positive year.
   // (Guyton 2004 / Klinger 2006: "Capital Preservation Rule applies in years when the
   // prior calendar year portfolio return was negative.")
-  let prevYearStockReturn = 0;
+  // Using stock-only return is incorrect for balanced portfolios: a year with stocks +5%
+  // and bonds -15% yields a negative total return (-3% on 60/40) — Safety should fire,
+  // but stock-only logic would enable Prosperity instead.
+  let prevYearPortfolioReturn = 0;
 
   // Track when SS income first activates so we can reset the G-K IWR baseline.
   // Without this reset, the first year of SS causes a sharp drop in net portfolio
@@ -668,7 +671,7 @@ const generateAuditLog = (
     } else if (state.iwr > 0.0001) {
       // Per the original G-K paper (Guyton 2004 / Klinger 2006), Safety fires only when the
       // prior year's portfolio return was negative, and Prosperity only when it was positive.
-      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearStockReturn < 0) {
+      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
         // Safety: portfolio shrinking faster than sustainable — cut spending.
         const newMult    = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
         const factor     = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
@@ -678,16 +681,18 @@ const generateAuditLog = (
         // Without this guard, an RMD-spiked CWR triggers Safety, and the 0.90 multiplier
         // then cuts the actual withdrawal below the legal minimum distribution.
         state.spend       = Math.max(state.spend, rmdAmount);
-        // When the RMD is the withdrawal floor, tax = spend × marginal rate (full pre-tax draw).
-        // In the normal gross-up path, tax = spend − before-tax-spend = the gross-up wedge.
-        taxOwed = rmdAmount > grossBaseSpend
+        // Tax formula: if spending ended at the RMD floor (either because RMD was the
+        // original floor OR because the 10% cut pushed below the RMD and got clamped
+        // back up), the entire distribution is treated as a mandatory pre-tax draw
+        // → tax = spend × marginal rate.  Otherwise use the standard gross-up wedge.
+        taxOwed = state.spend <= rmdAmount + 1
           ? state.spend * taxRate
           : state.spend - Math.max(0, baseSpend * factor);
         gkEvent = newMult === GK_FLOOR
           ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
           : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
         state.gkFiredLastYear = true;
-      } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
+      } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
         // Prosperity: portfolio very healthy — allow a spending raise.
         // Bug 4 fix: guard currentWR > 0 so a depleted portfolio (CWR = 0) cannot
         // trigger an endless chain of 10% raises on non-existent money.
@@ -763,8 +768,16 @@ const generateAuditLog = (
       crashed:           returns.crashed,        // jump-diffusion flag for audit annotation
     });
 
+    // Compute total portfolio return for this year so the NEXT year's G-K direction
+    // check uses the full portfolio return (stocks + bonds + cash), not just stocks.
+    // Formula: (end balance + withdrawal) / start balance − 1  (total-return convention).
+    const auditStartBalance = startCash + startStock + startBond; // actual values, pre-display-adjustment
+    if (auditStartBalance > 0.01) {
+      const auditEndBalance = outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash;
+      prevYearPortfolioReturn = (auditEndBalance + outcome.withdrawal) / auditStartBalance - 1;
+    }
+
     state = outcome.nextState;
-    prevYearStockReturn = returns.stock;
   }
   return log;
 };
@@ -859,7 +872,10 @@ export const runSimulation = (
     let prevRawPhaseSpend = initialSpend;
 
     let prevBalance = totalStartPortfolio;
-    let prevYearStockReturn = 0;
+    // Track the prior year's TOTAL portfolio return for G-K direction checks.
+    // Using stock-only return (previous approach) gives wrong results when bonds
+    // move against stocks, e.g. stocks +5% / bonds -15% on 60/40 = -3% portfolio.
+    let prevYearPortfolioReturn = 0;
     let prevSsIncomeActive = false;
 
     for (let year = 0; year < timeHorizon; year++) {
@@ -928,18 +944,20 @@ export const runSimulation = (
         state.iwr             = currentWR;
         state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
-        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearStockReturn < 0) {
+        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
           const newMult         = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
           const factor          = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend          *= factor;
           // Bug 1 fix: never cut spending below the IRS RMD floor.
           state.spend           = Math.max(state.spend, rmdThisYear);
-          taxOwed = rmdThisYear > grossBaseSpend
+          // Tax formula: if spending is at the RMD floor (original RMD floor or clamped
+          // back up after the 10% cut), treat the full distribution as taxable.
+          taxOwed = state.spend <= rmdThisYear + 1
             ? state.spend * taxRate
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
-        } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearStockReturn > 0) {
+        } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
           // Bug 4 fix: currentWR > 0 prevents a depleted portfolio from triggering
           // an endless loop of 10% raises (CWR = 0 always satisfies < 0.80 × IWR).
           const newMult         = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
@@ -971,12 +989,14 @@ export const runSimulation = (
       if (prevBalance > 0.01) {
         const performance = ((totalPortfolio + outcome.withdrawal) / prevBalance) - 1;
         runPortfolioReturns.push(performance);
+        // Store for the next year's G-K direction check (uses total portfolio return,
+        // not stock-only, to correctly gate Safety/Prosperity on balanced portfolios).
+        prevYearPortfolioReturn = performance;
       }
 
       currentRunTrajectory[year] = totalPortfolio;
       trajectoryColumns[year][sim] = totalPortfolio;
       prevBalance = totalPortfolio;
-      prevYearStockReturn = returns.stock;
     }
 
     const finalVal = state.stock + state.bond + state.cash;
