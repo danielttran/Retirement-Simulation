@@ -338,17 +338,28 @@ const simulateYear = (
   } else {
     if (isBucketStrategy) {
       // --- BUCKET STRATEGY ---
-      const targetBuffer = 2 * state.spend;
+      //
+      // targetBuffer is capped at 50% of the total current portfolio.
+      // Without this cap, when a portfolio shrinks close to 2× annual spend the
+      // strategy would liquidate 80–100% of stocks to fill the cash bucket,
+      // destroying the growth engine and producing misleading "sold gains" log
+      // entries when nearly all of what was sold was principal.
+      const totalCurrentPortfolio = currStock + currBond + currCash;
+      const targetBuffer = Math.min(2 * state.spend, totalCurrentPortfolio * 0.50);
       let refillAmount = 0;
+      let refillIncludesPrincipal = false;
 
-      // Rule: If Stocks are UP, sell gains to refill cash bucket
+      // Rule: If Stocks are UP, sell to refill cash bucket (up to the capped target).
       if (returns.stock > 0 && currStock > 0 && currCash < targetBuffer) {
         const needed = targetBuffer - currCash;
-        // Gross-up: sell enough stock so that net proceeds after cost equal exactly `needed`
-        // (selling exactly `needed` only delivers needed*(1-cost) < needed).
+        // Gross-up: sell enough stock so that net proceeds after cost equal exactly `needed`.
         const grossSellNeeded = needed / (1 - TRANSACTION_COST);
         const grossSell = Math.min(grossSellNeeded, currStock);
         const netCashReceived = grossSell * (1 - TRANSACTION_COST);
+
+        // Determine whether the sale dips into principal (not just gains).
+        const stockGain = Math.max(0, currStock - state.stock);
+        refillIncludesPrincipal = netCashReceived > stockGain;
 
         currStock -= grossSell;
         currCash += netCashReceived;
@@ -390,7 +401,8 @@ const simulateYear = (
       } else {
         actionLog = `Market up ${(returns.stock * 100).toFixed(1)}%.`;
         if (refillAmount > 0) {
-          actionLog += ` Sold stock gains to refill cash by $${Math.round(refillAmount / 1000)}k (2-yr buffer safe).`;
+          const refillLabel = refillIncludesPrincipal ? 'stocks' : 'stock gains';
+          actionLog += ` Sold ${refillLabel} to refill cash by $${Math.round(refillAmount / 1000)}k (buffer capped at 50% of portfolio).`;
         } else {
           actionLog += ` Cash buffer already full; no selling needed.`;
         }
