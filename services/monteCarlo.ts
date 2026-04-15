@@ -271,6 +271,9 @@ interface SimState {
   spendMultiplier: number;
   /** Initial Withdrawal Rate — set in year 0 as the baseline for G-K guardrail comparisons. */
   iwr: number;
+  /** True if a G-K guardrail fired in the immediately preceding year.
+   *  Enforces the standard 1-year cooldown: no back-to-back adjustments. */
+  gkFiredLastYear: boolean;
 }
 
 interface YearOutcome {
@@ -448,6 +451,7 @@ const simulateYear = (
       // Pass through G-K fields unchanged — mutations live in the calling loop.
       spendMultiplier: state.spendMultiplier,
       iwr: state.iwr,
+      gkFiredLastYear: state.gkFiredLastYear,
     },
     withdrawal: actualWithdrawal,
     fees,
@@ -478,6 +482,7 @@ const generateAuditLog = (
     stock: 0, bond: 0, cash: 0, spend: initialSpend,
     spendMultiplier: 1.0,
     iwr: 0,
+    gkFiredLastYear: false,
   };
 
   if (strategy === 'BUCKET') {
@@ -578,24 +583,32 @@ const generateAuditLog = (
 
     // --- Guyton-Klinger Guardrail Check ---
     // CWR uses totalPreWithdrawal (already computed above) — no duplicate calculation.
+    // A 1-year cooldown is enforced: if a guardrail fired last year, skip the check
+    // this year. This prevents back-to-back 10% cuts (or raises) that would otherwise
+    // spiral spending to near-zero in a prolonged downturn.
     let gkEvent = '';
     const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
     if (year === 1) {
       state.iwr = currentWR; // Baseline IWR set in the first retirement year
+      state.gkFiredLastYear = false;
     } else if (state.iwr > 0.0001) {
-      if (currentWR > state.iwr * 1.20) {
+      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20) {
         state.spendMultiplier *= 0.90;
         state.spend           *= 0.90;
         // Recalculate taxOwed from the post-G-K spend so audit row is accurate.
         taxOwed = state.spend - Math.max(0, baseSpend * 0.90);
         gkEvent = 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
-      } else if (currentWR < state.iwr * 0.80) {
+        state.gkFiredLastYear = true;
+      } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80) {
         state.spendMultiplier *= 1.10;
         state.spend           *= 1.10;
         // Recalculate taxOwed from the post-G-K spend so audit row is accurate.
         taxOwed = state.spend - Math.max(0, baseSpend * 1.10);
         gkEvent = 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
+        state.gkFiredLastYear = true;
+      } else {
+        state.gkFiredLastYear = false;
       }
     }
 
@@ -693,6 +706,7 @@ export const runSimulation = (
       stock: 0, bond: 0, cash: 0, spend: initialSpend,
       spendMultiplier: 1.0,
       iwr: 0,
+      gkFiredLastYear: false,
     };
 
     if (strategy === 'BUCKET') {
@@ -783,21 +797,27 @@ export const runSimulation = (
       // --- Guyton-Klinger Guardrail Check ---
       // totalPreWithdrawal is already computed above for the RMD calculation.
       // Year 0 establishes the IWR; year 1+ may trigger adjustments.
+      // 1-year cooldown: skip if a guardrail fired last year (mirrors generateAuditLog).
       const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
       if (year === 0) {
         state.iwr = currentWR;
+        state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
-        if (currentWR > state.iwr * 1.20) {
+        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20) {
           state.spendMultiplier *= 0.90;
           state.spend           *= 0.90;
           // Recalculate taxOwed from the post-G-K spend to keep totalPortfolio accounting accurate.
           taxOwed = state.spend - Math.max(0, baseSpend * 0.90);
-        } else if (currentWR < state.iwr * 0.80) {
+          state.gkFiredLastYear = true;
+        } else if (!state.gkFiredLastYear && currentWR < state.iwr * 0.80) {
           state.spendMultiplier *= 1.10;
           state.spend           *= 1.10;
           // Recalculate taxOwed from the post-G-K spend to keep totalPortfolio accounting accurate.
           taxOwed = state.spend - Math.max(0, baseSpend * 1.10);
+          state.gkFiredLastYear = true;
+        } else {
+          state.gkFiredLastYear = false;
         }
       }
 
