@@ -607,6 +607,13 @@ const generateAuditLog = (
     prevSsIncomeActive = ssIncomeThisYear > 0;
     const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
 
+    // Bug Fix: Reset the Guyton-Klinger penalty/bonus when transitioning to a new
+    // voluntary spending phase or when Social Security activates. Carrying forward
+    // historical adjustments penalizes the new planned budget.
+    if (isPhaseTransition) {
+      state.spendMultiplier = 1.0;
+    }
+
     const taxRate    = inputs.withdrawalTaxRate / 100;
     const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
@@ -898,6 +905,11 @@ export const runSimulation = (
       const ssIncomeJustActivated = !prevSsIncomeActive && ssActive;
       prevSsIncomeActive = ssActive;
       const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
+
+      // Bug Fix: Reset the Guyton-Klinger penalty/bonus during Phase Transitions.
+      if (isPhaseTransition) {
+        state.spendMultiplier = 1.0;
+      }
 
       // Blended effective tax rate: only the fraction held in tax-deferred accounts
       // is taxable on withdrawal. See generateAuditLog for the identical derivation.
