@@ -115,8 +115,8 @@ Transaction Cost: 0.05% friction applied to all sell/buy/rebalance trades (in ad
 Stochastic Inflation: N(${inputs.inflationRate}%, 1.5%²) drawn per year; correlated −0.30 with equity draw
 Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawdown beyond log-normal
 Guyton-Klinger Guardrails:
-  • Safety Rule: If CWR > 120% of IWR AND the prior year's total portfolio return was negative → spending cut by 10%
-  • Prosperity Rule: If CWR < 80% of IWR AND the prior year's total portfolio return was positive → spending raised by 10%
+  • Safety Rule: If CWR (Current Withdrawal Rate) > 120% of IWR (Initial Withdrawal Rate) AND the prior year's total portfolio return was negative → spending cut by 10%
+  • Prosperity Rule: If CWR (Current Withdrawal Rate) < 80% of IWR (Initial Withdrawal Rate) AND the prior year's total portfolio return was positive → spending raised by 10%
   • 1-year cooldown: No back-to-back guardrail adjustments (prevents every-other-year spiral)
   • Cumulative bounds: spending multiplier clamped to [0.85, 1.25] (max 15% cut / 25% raise from phase baseline)
   • IWR baseline resets at spending phase transitions and when Social Security income first activates
@@ -754,19 +754,19 @@ ${auditSample}
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">shield</span>Capital Preservation
                       </span>
-                      <span>Safety Guardrail Triggered: Your gross portfolio withdrawal rate exceeded 120% of the rate set in your first retirement year &mdash; meaning your portfolio is shrinking faster than your spending justifies. Spending was automatically reduced by 10% to extend your portfolio&apos;s life.</span>
+                      <span>Safety Guardrail Triggered: Your gross portfolio withdrawal rate exceeded 120% of the rate set in your first retirement year AND your prior year's portfolio return was negative. Spending was automatically reduced by 10% to extend your portfolio's life.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">trending_up</span>Prosperity Rule
                       </span>
-                      <span>Prosperity Guardrail Triggered: Your gross portfolio withdrawal rate dropped below 80% of the rate set in your first retirement year &mdash; your portfolio is very healthy. Spending was safely raised by 10%!</span>
+                      <span>Prosperity Guardrail Triggered: Your gross portfolio withdrawal rate dropped below 80% of the rate set in your first retirement year AND your prior year's portfolio return was positive. Spending was safely raised by 10%!</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-bold whitespace-nowrap shrink-0">
                         <span className="material-symbols-outlined text-xs leading-none">verified</span>RMD: $X (met)
                       </span>
-                      <span>Required Minimum Distribution (RMD): IRS rules (SECURE 2.0 / Pub. 590-B) require a minimum annual withdrawal from Traditional 401(k) and IRA accounts once you reach your RMD age. If your living expenses are less than the RMD, the RMD becomes your withdrawal floor for that year &mdash; and you owe income tax on the full RMD amount.</span>
+                      <span>Required Minimum Distribution (RMD): IRS rules (SECURE 2.0 / Pub. 590-B) require a minimum annual withdrawal from Traditional 401(k) and IRA accounts once you reach your RMD age. If your living expenses are less than the RMD, the RMD becomes your withdrawal floor for that year &mdash; and you owe income tax on the full RMD amount. Shows (VIOLATION) if your portfolio is depleted enough to mathematically fail fulfilling your RMD requirement.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0">GK Multiplier &times;X.XXX</span>
@@ -777,8 +777,8 @@ ${auditSample}
                       <span>Actual Inflation: The exact inflation for this specific year (which randomly jumps around your expected average).</span>
                     </div>
                     <div className="flex items-start gap-2">
-                      <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Nominal (1099-R): ~$X</span>
-                      <span>Future Dollars (Form 1099-R): The dollar amount that will actually appear on your tax form years from now, adjusted for inflation.</span>
+                      <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Nominal (Gross dist.): ~$X</span>
+                      <span>Future Dollars (Gross Distribution): The full nominal distribution. Only the pre-tax portion of this amount will actually appear as taxable on your Form 1099-R years from now, adjusted for inflation.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">Total Draw = Spend + Tax</span>
