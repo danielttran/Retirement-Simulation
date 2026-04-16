@@ -111,9 +111,16 @@ Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(re
 --- SIMULATION MODEL (for your reference) ---
 Engine: 100,000-path Monte Carlo, log-normal returns, Cholesky correlation (Stock–Bond ρ=−0.15)
 Market Assumptions: Stock μ=${inputs.expectedStockReturn}%/σ=17%, Bond μ=4.0%/σ=5%, Cash μ=2.5%/σ=1.5% (all nominal)
+Transaction Cost: 0.05% friction applied to all sell/buy/rebalance trades (in addition to the annual management fee)
 Stochastic Inflation: N(${inputs.inflationRate}%, 1.5%²) drawn per year; correlated −0.30 with equity draw
 Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawdown beyond log-normal
-Guyton-Klinger Guardrails: CWR > 120% of IWR → spending −10% (max 15% cumulative cut); CWR < 80% of IWR → spending +10% (max 25% cumulative raise)
+Guyton-Klinger Guardrails:
+  • Safety Rule: If CWR > 120% of IWR AND the prior year's total portfolio return was negative → spending cut by 10%
+  • Prosperity Rule: If CWR < 80% of IWR AND the prior year's total portfolio return was positive → spending raised by 10%
+  • 1-year cooldown: No back-to-back guardrail adjustments (prevents every-other-year spiral)
+  • Cumulative bounds: spending multiplier clamped to [0.85, 1.25] (max 15% cut / 25% raise from phase baseline)
+  • IWR baseline resets at spending phase transitions and when Social Security income first activates
+Bucket Strategy: Cash buffer sized at 2× grossed-up annual spend (including tax gross-up, not raw spend); buffer capped at 50% of portfolio to protect growth engine
 Drift-Band Rebalancing: ±5% absolute equity ratio band; proportional sell within band, full rebalance outside
 RMD: SECURE 2.0 / IRS Pub 590-B; mandatory floor enforced (if RMD > spending need, RMD sets the withdrawal)
 Tax Gross-Up: blended effective rate = withdrawalTaxRate × (taxDeferredRatio/100); spending grossed up so portfolio withdrawal funds both spend and taxes
@@ -123,10 +130,10 @@ Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowA
 
 --- SIMULATION RESULTS ---
 Success Rate: ${results.successRate.toFixed(1)}% (portfolio balance never fell to $1 or below at any point during the ${inputs.timeHorizon}-year term)
-Median Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+P${inputs.percentileAverage} Representative Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
 Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
 
---- AUDIT LOG SAMPLE — P${inputs.percentileAverage} (Median) Run, First 10 Years ---
+--- AUDIT LOG SAMPLE — P${inputs.percentileAverage} Run, First 10 Years ---
 (All $ in real today's dollars. Verify: Start + Growth − Fees − Withdrawal = End)
 ${auditSample}
 
@@ -378,7 +385,7 @@ ${auditSample}
 
       <main className="max-w-[1440px] mx-auto px-6 md:px-10 py-10">
         {/* Strategy Tabs */}
-        <div className="mb-10 border-b border-slate-200 dark:border-slate-800 transition-colors overflow-x-auto">
+        <div className="mb-5 border-b border-slate-200 dark:border-slate-800 transition-colors overflow-x-auto">
           <div className="flex gap-8 md:gap-12 min-w-max" role="tablist" aria-label="Investment strategies">
             {(['BUCKET', 'CONSERVATIVE', 'AGGRESSIVE', 'CUSTOM'] as StrategyType[]).map((t) => (
               <button
@@ -429,7 +436,7 @@ ${auditSample}
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-10">
+        <div className="grid grid-cols-12 gap-5">
           {/* Sidebar Insights (Moved to Left) */}
           {isSidebarOpen && (
             <aside className="col-span-12 lg:col-span-3 space-y-8">
@@ -502,7 +509,7 @@ ${auditSample}
           <div className={`col-span-12 ${isSidebarOpen ? 'lg:col-span-9' : 'lg:col-span-12'} transition-all duration-300`}>
 
             {/* Chart Container */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-10 shadow-sm mb-10 transition-colors duration-300">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 md:p-10 shadow-sm mb-5 transition-colors duration-300">
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">Portfolio Projection</h2>
@@ -677,7 +684,7 @@ ${auditSample}
             </div>
 
             {/* Detailed Data Table */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-10 transition-colors duration-300">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden mb-5 transition-colors duration-300">
               <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors">
                 <div className="flex items-center gap-4">
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
@@ -816,11 +823,11 @@ ${auditSample}
                       <tr>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 sticky top-0 z-20 shadow-sm transition-colors">Year</th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500 sticky top-0 z-20 shadow-sm transition-colors">
-                          Most Likely
+                          Average Market
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileAverage} of 100k runs</div>
                         </th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-below-avg-gold dark:text-amber-500 sticky top-0 z-20 shadow-sm transition-colors">
-                          Conservative
+                          Below Average
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileBelowAverage} of 100k runs</div>
                         </th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-downturn-red dark:text-red-500 sticky top-0 z-20 shadow-sm transition-colors">
@@ -997,10 +1004,10 @@ ${auditSample}
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of the 100,000 simulations where the portfolio balance never fell to $1 or below at any point during the {inputs.timeHorizon}-year period &mdash; not just at the end. A single year of depletion counts as failure even if later income temporarily restored the balance.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
-                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Median Final Portfolio Value</span>
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">P{inputs.percentileAverage} Final Portfolio Value</span>
                 <span className="text-2xl font-bold text-average-blue dark:text-blue-400 transition-colors">{formatCurrency(results.finalMedianValue)}</span>
                 <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">Real dollars (today's purchasing power) &mdash; inflation-adjusted.</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">The middle projected portfolio value in {startYear + inputs.timeHorizon}. Half of all 100,000 simulations ended above this amount; half ended below. Expressed in today's purchasing power.</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">The projected portfolio value in {startYear + inputs.timeHorizon} for the representative P{inputs.percentileAverage} simulation run (the single run whose year-by-year trajectory most closely matches the green P{inputs.percentileAverage} percentile curve). Expressed in today's purchasing power.</p>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Projected Volatility</span>
@@ -1019,7 +1026,7 @@ ${auditSample}
             {/* Model Assumptions Disclosure — for CPA / IRS reviewer transparency.
                 All parameters listed here are fixed research-based constants baked
                 into the Monte Carlo engine. They are NOT user-configurable inputs. */}
-            <details className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <details open className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mt-5">
               <summary className="px-6 py-4 cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none hover:text-slate-700 dark:hover:text-slate-200 transition-colors list-none">
                 <span className="material-symbols-outlined text-sm leading-none">info</span>
                 Model Assumptions (Fixed — For CPA / IRS Review)
