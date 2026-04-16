@@ -519,7 +519,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   prefix="$"
                   suffix="/mo"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Your estimated monthly benefit. Once you reach your claiming age, this amount reduces how much the simulation needs to withdraw from your portfolio each year — protecting your investments from being spent too fast.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Your estimated monthly benefit. Once you reach your claiming age, this amount reduces how much the simulation needs to withdraw from your portfolio each year — protecting your investments from being spent too fast. (Note: Assumes up to 85% of this benefit may be taxable based on IRS rules, reducing the net offset).</p>
               </div>
 
               <div>

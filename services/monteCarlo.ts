@@ -79,11 +79,10 @@ function computeFirstYearGrossedUpSpend(
   const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
   if (ageAtYear1 >= inputs.socialSecurityAge) {
-    // Bug 5 fix: SS income is not 100% tax-free for high-income retirees.
-    // Only the after-tax portion of SS offsets the portfolio withdrawal need;
-    // the tax on SS benefits (at the user's withdrawalTaxRate) must still come
-    // from the portfolio. Equivalent to: baseSpend -= SS * (1 - taxRate).
-    baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate);
+    // Bug 5 fix & 85% rule: SS income is not 100% tax-free for high-income retirees.
+    // Under IRS rules, up to 85% of Social Security benefits can be taxed.
+    // We apply the withdrawal tax rate to 85% of the SS income.
+    baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate * 0.85);
   }
   const rmdAmount = computeRMD(portfolioBalance, ageAtYear1, inputs.taxDeferredRatio, inputs.birthYear);
 
@@ -618,11 +617,9 @@ const generateAuditLog = (
     const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
     if (ssIncomeThisYear > 0) {
-      // Bug 5 fix: SS income is not 100% tax-free for high-income retirees.
-      // Only the after-tax portion offsets the portfolio withdrawal need; the tax
-      // on SS (at withdrawalTaxRate) must still come from the portfolio.
-      // Equivalent to: baseSpend -= ssIncomeThisYear * (1 - taxRate).
-      baseSpend -= ssIncomeThisYear * (1 - taxRate);
+      // Bug 5 fix & 85% rule: SS income is not 100% tax-free for high-income retirees.
+      // Under IRS rules, up to 85% of Social Security benefits can be taxed.
+      baseSpend -= ssIncomeThisYear * (1 - taxRate * 0.85);
     }
 
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
@@ -878,7 +875,7 @@ export const runSimulation = (
     // Phase-transition tracking: mirrors generateAuditLog.
     let prevRawPhaseSpend = initialSpend;
 
-    let prevBalance = totalStartPortfolio;
+    let prevBalance = state.stock + state.bond + state.cash;
     // Track the prior year's TOTAL portfolio return for G-K direction checks.
     // Using stock-only return (previous approach) gives wrong results when bonds
     // move against stocks, e.g. stocks +5% / bonds -15% on 60/40 = -3% portfolio.
@@ -917,10 +914,9 @@ export const runSimulation = (
       const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
       if (ssActive) {
-        // Bug 5 fix: SS income is not 100% tax-free for high-income retirees.
-        // Only the after-tax portion offsets the portfolio withdrawal need; the tax
-        // on SS (at withdrawalTaxRate) must still come from the portfolio.
-        baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate);
+        // Bug 5 fix & 85% rule: SS income is not 100% tax-free for high-income retirees.
+        // Under IRS rules, up to 85% of Social Security benefits can be taxed.
+        baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate * 0.85);
       }
 
       const totalPreWithdrawal = state.stock + state.bond + state.cash;

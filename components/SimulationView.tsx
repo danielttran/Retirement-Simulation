@@ -113,10 +113,11 @@ Engine: 100,000-path Monte Carlo, log-normal returns, Cholesky correlation (Stoc
 Market Assumptions: Stock μ=${inputs.expectedStockReturn}%/σ=17%, Bond μ=4.0%/σ=5%, Cash μ=2.5%/σ=1.5% (all nominal)
 Stochastic Inflation: N(${inputs.inflationRate}%, 1.5%²) drawn per year; correlated −0.30 with equity draw
 Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawdown beyond log-normal
-Guyton-Klinger Guardrails: CWR > 120% of IWR → spending −10%; CWR < 80% of IWR → spending +10%
+Guyton-Klinger Guardrails: CWR > 120% of IWR → spending −10% (max 15% cumulative cut); CWR < 80% of IWR → spending +10% (max 25% cumulative raise)
 Drift-Band Rebalancing: ±5% absolute equity ratio band; proportional sell within band, full rebalance outside
 RMD: SECURE 2.0 / IRS Pub 590-B; mandatory floor enforced (if RMD > spending need, RMD sets the withdrawal)
 Tax Gross-Up: blended effective rate = withdrawalTaxRate × (taxDeferredRatio/100); spending grossed up so portfolio withdrawal funds both spend and taxes
+Social Security Tax: Up to 85% of Social Security benefits are modeled as taxable at your withdrawal tax rate, reducing their net offset to your portfolio withdrawal.
 All portfolio values are in real (today's) dollars; nominalWithdrawal for 1099-R reference uses cumulative stochastic inflation
 Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowAverage} (gold), P${inputs.percentileDownturn} (red) of 100,000 runs
 
@@ -171,7 +172,7 @@ ${auditSample}
           </ul>
           <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation:</p>
           <ol className="list-decimal pl-4 space-y-2">
-            <li>If the market is <strong>UP</strong> (Stock Up), we sell gains to refill the Cash Bucket back to 2 years.</li>
+            <li>If the market is <strong>UP</strong> (Stock Up), we sell stocks (preferring gains) to refill the Cash Bucket back to 2 years.</li>
             <li>If the market is <strong>DOWN</strong> (Stock Down), we <strong>do not sell stocks</strong>. We spend directly from the Cash Bucket, allowing stocks time to recover.</li>
             <li>Stocks are only sold in a downturn if the Cash Bucket is completely empty.</li>
           </ol>
@@ -1035,8 +1036,8 @@ ${auditSample}
                     { label: 'Market Relationships', value: '\u22120.30 Correlation', note: 'When stocks have a bad year, inflation tends to be slightly lower (e.g., during recessions). The simulation models this with a \u22120.30 correlation between stock returns and inflation draws.' },
                     { label: 'Market Crash Probability', value: '2% / year', note: 'A black-swan event; about a 55% chance of occurring over a 40-year lifetime' },
                     { label: 'Crash Severity', value: '20\u201340% drop', note: 'Suddenly slashes the value of stocks for that specific year on top of normal market swings' },
-                    { label: 'Safety Guardrail (Guyton-Klinger)', value: 'Overspending \u2192 \u221210%', note: 'Cuts spending by 10% if your withdrawal rate rises above 120% of the starting rate' },
-                    { label: 'Prosperity Guardrail (Guyton-Klinger)', value: 'Excess growth \u2192 +10%', note: 'Raises spending by 10% if your withdrawal rate falls below 80% of the starting rate' },
+                    { label: 'Safety Guardrail (Guyton-Klinger)', value: 'Overspending \u2192 \u221210%', note: 'Cuts spending by 10% if your withdrawal rate rises above 120% of the starting rate (capped at max 15% cumulative reduction)' },
+                    { label: 'Prosperity Guardrail (Guyton-Klinger)', value: 'Excess growth \u2192 +10%', note: 'Raises spending by 10% if your withdrawal rate falls below 80% of the starting rate (capped at max 25% cumulative raise)' },
                     { label: 'Rebalancing Limit', value: '\u00b15% of target mix', note: 'We only force a costly trade if your mix wanders too far off target' },
                     { label: 'Fees & Costs', value: `${inputs.managementFee}% Mgt + 0.05% Trade`, note: `Your ${inputs.managementFee}% yearly management fee plus 0.05% friction cost applied whenever selling or buying` },
                     { label: 'Required Distribution (RMD)', value: 'IRS Uniform Lifetime', note: 'Follows SECURE 2.0 / IRS Pub.\u00a0590-B: age 72 (born \u22641950), age 73 (born 1951\u20131959), age 75 (born \u22651960). The simulation uses your Birth Year to set the exact threshold.' },
