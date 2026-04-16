@@ -86,7 +86,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const aiPromptText = useMemo(() => {
     const auditRows = results.auditLogAverage;
     const auditSample = auditRows.slice(0, 10).map(r =>
-      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round((r.startCash ?? 0) + (r.startStock ?? 0) + (r.startBond ?? 0)).toLocaleString()} | Stock ${((r.stockReturn ?? 0)*100).toFixed(1)}% Bond ${((r.bondReturn ?? 0)*100).toFixed(1)}% Infl ${((r.realizedInflation ?? 0)*100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount ?? 0).toLocaleString()} | Fees -$${Math.round(r.feesAmount ?? 0).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal ?? 0).toLocaleString()} (Tax -$${Math.round(r.taxPaid ?? 0).toLocaleString()}) | SS +$${Math.round(r.ssIncome ?? 0).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount ?? 0).toLocaleString()} | End $${Math.round(r.endTotal ?? 0).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
+      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round((r.startCash ?? 0) + (r.startStock ?? 0) + (r.startBond ?? 0)).toLocaleString()} | Stock ${((r.stockReturn ?? 0) * 100).toFixed(1)}% Bond ${((r.bondReturn ?? 0) * 100).toFixed(1)}% Infl ${((r.realizedInflation ?? 0) * 100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount ?? 0).toLocaleString()} | Fees -$${Math.round(r.feesAmount ?? 0).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal ?? 0).toLocaleString()} (Tax -$${Math.round(r.taxPaid ?? 0).toLocaleString()}) | SS +$${Math.round(r.ssIncome ?? 0).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount ?? 0).toLocaleString()} | End $${Math.round(r.endTotal ?? 0).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
     ).join('\n');
 
     return `Retirement Simulation Validation Request
@@ -428,7 +428,7 @@ ${auditSample}
               />
             </button>
             <span
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors uppercase tracking-wider cursor-pointer"
             >
               {isSidebarOpen ? 'Hide Insights' : 'Show Insights'}
@@ -908,11 +908,10 @@ ${auditSample}
                             {/* Guyton-Klinger guardrail event — styled as a distinct badge so it
                                 is never confused with the mechanical strategy action below it. */}
                             {row.gkEvent && (
-                              <div className={`mb-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${
-                                row.gkEvent.startsWith('Safety')
+                              <div className={`mb-2 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${row.gkEvent.startsWith('Safety')
                                   ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
                                   : 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
-                              }`}>
+                                }`}>
                                 <span className="material-symbols-outlined text-xs leading-none">
                                   {row.gkEvent.startsWith('Safety') ? 'shield' : 'trending_up'}
                                 </span>
@@ -948,11 +947,10 @@ ${auditSample}
                               Nominal (1099-R): ~${row.nominalWithdrawal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
                             {row.rmdAmount > 0 && (
-                              <div className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide ${
-                                row.withdrawal >= row.rmdAmount - 1
+                              <div className={`mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide ${row.withdrawal >= row.rmdAmount - 1
                                   ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
                                   : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'
-                              }`}>
+                                }`}>
                                 <span className="material-symbols-outlined text-xs leading-none">
                                   {row.withdrawal >= row.rmdAmount - 1 ? 'verified' : 'warning'}
                                 </span>
@@ -1029,7 +1027,7 @@ ${auditSample}
             <details open className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mt-5">
               <summary className="px-6 py-4 cursor-pointer flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none hover:text-slate-700 dark:hover:text-slate-200 transition-colors list-none">
                 <span className="material-symbols-outlined text-sm leading-none">info</span>
-                Model Assumptions (Fixed — For CPA / IRS Review)
+                Model Assumptions (CPA / IRS Review)
                 <span className="material-symbols-outlined text-sm leading-none ml-auto">expand_more</span>
               </summary>
               <div className="px-6 pb-5 pt-2 border-t border-slate-100 dark:border-slate-800">

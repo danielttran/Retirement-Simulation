@@ -24,8 +24,8 @@ const TRANSACTION_COST = 0.0005; // 0.05% friction on selling/rebalancing
 // reduction over 20 years — far beyond what G-K was ever intended to produce.
 // 0.85 floor = spending can never drop more than 15% below the phase target.
 // 1.25 ceiling = spending can never rise more than 25% above the phase target.
-const GK_FLOOR    = 0.85;
-const GK_CEILING  = 1.25;
+const GK_FLOOR = 0.85;
+const GK_CEILING = 1.25;
 
 // ---------------------------------------------------------------------------
 // RMD — IRS Uniform Lifetime Table (Publication 590-B, SECURE 2.0 / 2022+)
@@ -44,7 +44,7 @@ const RMD_FACTORS: Readonly<Record<number, number>> = {
  */
 function computeRMD(realBalance: number, age: number, taxDeferredRatio: number, birthYear: number): number {
   if (taxDeferredRatio <= 0) return 0;
-  
+
   let threshold = 73; // Default SECURE 2.0
   if (birthYear <= 1950) threshold = 72;  // born ≤ 1950: attains 72 before Jan 1 2023 → pre-SECURE 2.0 age-72 rule
   else if (birthYear >= 1960) threshold = 75;
@@ -79,7 +79,7 @@ function computeFirstYearGrossedUpSpend(
   const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
   if (ageAtYear1 >= inputs.socialSecurityAge) {
-    // Bug 5 fix & 85% rule: SS income is not 100% tax-free for high-income retirees.
+    // 85% rule: SS income is not 100% tax-free for high-income retirees.
     // Under IRS rules, up to 85% of Social Security benefits can be taxed.
     // We apply the withdrawal tax rate to 85% of the SS income.
     baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate * 0.85);
@@ -207,28 +207,28 @@ function generateAnnualReturns(
   const inflationZ = INFLATION_EQUITY_CORR * Z[0]
     + Math.sqrt(1 - INFLATION_EQUITY_CORR * INFLATION_EQUITY_CORR) * Z_inf;
   // Floor at −5 % to prevent extreme deflation from producing nonsensical real returns.
-  const annualInflation  = Math.max(meanInflation + inflationStdDev * inflationZ, -0.05);
+  const annualInflation = Math.max(meanInflation + inflationStdDev * inflationZ, -0.05);
   const inflationDivisor = 1 + annualInflation;
 
   // --- Step 4: Per-year nominal → real conversion ---
   // Real return mean:  (1 + nomMean) / (1 + inflation) − 1
   // Real return stdDev: nomStd / (1 + inflation)  [variance-scaling property]
   const toReal = (nomMean: number, nomStd: number) => ({
-    mean:   (1 + nomMean) / inflationDivisor - 1,
+    mean: (1 + nomMean) / inflationDivisor - 1,
     stdDev: nomStd / inflationDivisor,
   });
   const sReal = toReal(nominalAssumptions.STOCK.mean, nominalAssumptions.STOCK.stdDev);
-  const bReal = toReal(nominalAssumptions.BOND.mean,  nominalAssumptions.BOND.stdDev);
-  const cReal = toReal(nominalAssumptions.CASH.mean,  nominalAssumptions.CASH.stdDev);
+  const bReal = toReal(nominalAssumptions.BOND.mean, nominalAssumptions.BOND.stdDev);
+  const cReal = toReal(nominalAssumptions.CASH.mean, nominalAssumptions.CASH.stdDev);
 
   // --- Step 5: Log-normal moment matching (unchanged from original) ---
   // Converts arithmetic mean / stdDev to log-normal parameters (μ_log, σ_log)
   // via the standard φ = √(σ² + μ²) shorthand.
   // Clamp μ > 0 to avoid NaN when real return mean approaches −1.
   const getLogParams = (arithMean: number, arithStd: number) => {
-    const term     = Math.max(1 + arithMean, 0.0001);
-    const phi      = Math.sqrt(arithStd * arithStd + term * term);
-    const mu_log   = Math.log(term * term / phi);
+    const term = Math.max(1 + arithMean, 0.0001);
+    const phi = Math.sqrt(arithStd * arithStd + term * term);
+    const mu_log = Math.log(term * term / phi);
     const sigma_log = Math.sqrt(Math.log(phi * phi / (term * term)));
     return { mu_log, sigma_log };
   };
@@ -239,11 +239,11 @@ function generateAnnualReturns(
 
   // --- Step 6: Draw log-normal returns ---
   let stockReturn = Math.exp(sP.mu_log + sP.sigma_log * Z_corr[0]) - 1;
-  const bondReturn  = Math.exp(bP.mu_log + bP.sigma_log * Z_corr[1]) - 1;
+  const bondReturn = Math.exp(bP.mu_log + bP.sigma_log * Z_corr[1]) - 1;
 
   // Cash floor: 0 % nominal → real floor = −inflation / (1 + inflation)
   const minRealCash = -annualInflation / inflationDivisor;
-  const cashReturn  = Math.max(
+  const cashReturn = Math.max(
     Math.exp(cP.mu_log + cP.sigma_log * Z_corr[2]) - 1,
     minRealCash
   );
@@ -439,24 +439,24 @@ const simulateYear = (
           // OUTSIDE band: full corrective rebalance back to target weights.
           // tradeAmount covers both funding the withdrawal AND correcting drift.
           const targetStock = total * targetWeights.stock;
-          const targetBond  = total * targetWeights.bond;
+          const targetBond = total * targetWeights.bond;
           const tradeAmount = Math.abs(currStock - targetStock) + Math.abs(currBond - targetBond);
           const rebalancingCost = tradeAmount * TRANSACTION_COST;
-          total    -= rebalancingCost;
-          fees     += rebalancingCost;
+          total -= rebalancingCost;
+          fees += rebalancingCost;
           currStock = total * targetWeights.stock;
-          currBond  = total * targetWeights.bond;
-          currCash  = 0;
+          currBond = total * targetWeights.bond;
+          currCash = 0;
           actionLog = `Mix drifted too far (${(drift * 100).toFixed(1)}%). Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
         } else {
           // WITHIN band (≤ 5 %): sell proportionally at the current allocation.
           // Only charge friction on the liquidation required to cover spending.
           const withdrawalCost = actualWithdrawal * TRANSACTION_COST;
-          total    -= withdrawalCost;
-          fees     += withdrawalCost;
+          total -= withdrawalCost;
+          fees += withdrawalCost;
           currStock = total * currentEquityRatio;
-          currBond  = total * (1 - currentEquityRatio);
-          currCash  = 0;
+          currBond = total * (1 - currentEquityRatio);
+          currCash = 0;
           actionLog = `Mix stayed within 5% limit. Normal withdrawal at ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)}, without extra rebalancing trades.`;
         }
       } else {
@@ -509,7 +509,7 @@ const generateAuditLog = (
     gkFiredLastYear: false,
   };
 
-  // Bug 3 fix: capture the one-time setup friction so Year 1 of the audit log can
+  // capture the one-time setup friction so Year 1 of the audit log can
   // surface it as an explicit fee. Without this, the starting balance appears lower
   // than the user's input with no corresponding fees entry — "vanishing money".
   let initialSetupCost = 0;
@@ -585,9 +585,9 @@ const generateAuditLog = (
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
     // Capture raw phase spend BEFORE SS / multiplier modifications for phase-change detection.
-    const rawPhaseSpend   = baseSpend;
-    const phaseChanged    = year > 1 && rawPhaseSpend !== prevRawPhaseSpend;
-    prevRawPhaseSpend     = rawPhaseSpend;
+    const rawPhaseSpend = baseSpend;
+    const phaseChanged = year > 1 && rawPhaseSpend !== prevRawPhaseSpend;
+    prevRawPhaseSpend = rawPhaseSpend;
 
     // --- RMD & Tax Gross-Up ---
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
@@ -606,18 +606,18 @@ const generateAuditLog = (
     prevSsIncomeActive = ssIncomeThisYear > 0;
     const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
 
-    // Bug Fix: Reset the Guyton-Klinger penalty/bonus when transitioning to a new
+    // Reset the Guyton-Klinger penalty/bonus when transitioning to a new
     // voluntary spending phase or when Social Security activates. Carrying forward
     // historical adjustments penalizes the new planned budget.
     if (isPhaseTransition) {
       state.spendMultiplier = 1.0;
     }
 
-    const taxRate    = inputs.withdrawalTaxRate / 100;
+    const taxRate = inputs.withdrawalTaxRate / 100;
     const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
     if (ssIncomeThisYear > 0) {
-      // Bug 5 fix & 85% rule: SS income is not 100% tax-free for high-income retirees.
+      // 85% rule: SS income is not 100% tax-free for high-income retirees.
       // Under IRS rules, up to 85% of Social Security benefits can be taxed.
       baseSpend -= ssIncomeThisYear * (1 - taxRate * 0.85);
     }
@@ -625,7 +625,7 @@ const generateAuditLog = (
     const totalPreWithdrawal = state.stock + state.bond + state.cash;
     const rmdAmount = computeRMD(totalPreWithdrawal, ageThisYear, inputs.taxDeferredRatio, inputs.birthYear);
 
-    // BUG FIX: Apply the accumulated G-K multiplier BEFORE computing taxOwed so
+    // Apply the accumulated G-K multiplier BEFORE computing taxOwed so
     // the tax gross-up reflects the actual (already-adjusted) spending need, not
     // the pre-guardrail amount.  (Prior order over-taxed Capital Preservation years.)
     baseSpend *= state.spendMultiplier;
@@ -648,11 +648,11 @@ const generateAuditLog = (
       // RMD forces a larger distribution than the spending need.
       // Tax is withheld from the RMD distribution itself.
       state.spend = rmdAmount;
-      taxOwed     = rmdAmount * taxRate;
+      taxOwed = rmdAmount * taxRate;
     } else {
       // Spending need exceeds RMD — normal tax gross-up path.
       state.spend = grossBaseSpend;
-      taxOwed     = grossBaseSpend - Math.max(0, baseSpend);
+      taxOwed = grossBaseSpend - Math.max(0, baseSpend);
     }
 
     // --- Guyton-Klinger Guardrail Check ---
@@ -670,21 +670,21 @@ const generateAuditLog = (
 
     if (year === 1 || isPhaseTransition) {
       // Year 1 or new spending phase: establish / re-establish the G-K baseline.
-      state.iwr             = currentWR;
+      state.iwr = currentWR;
       state.gkFiredLastYear = false;
     } else if (state.iwr > 0.0001) {
       // Per the original G-K paper (Guyton 2004 / Klinger 2006), Safety fires only when the
       // prior year's portfolio return was negative, and Prosperity only when it was positive.
       if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
         // Safety: portfolio shrinking faster than sustainable — cut spending.
-        const newMult    = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
-        const factor     = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
+        const newMult = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
+        const factor = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
         state.spendMultiplier = newMult;
-        state.spend      *= factor;
-        // Bug 1 fix: the GK 10% cut must never push spending below the IRS RMD floor.
+        state.spend *= factor;
+        // the GK 10% cut must never push spending below the IRS RMD floor.
         // Without this guard, an RMD-spiked CWR triggers Safety, and the 0.90 multiplier
         // then cuts the actual withdrawal below the legal minimum distribution.
-        state.spend       = Math.max(state.spend, rmdAmount);
+        state.spend = Math.max(state.spend, rmdAmount);
         // Tax formula: if spending ended at the RMD floor (either because RMD was the
         // original floor OR because the 10% cut pushed below the RMD and got clamped
         // back up), the entire distribution is treated as a mandatory pre-tax draw
@@ -698,12 +698,12 @@ const generateAuditLog = (
         state.gkFiredLastYear = true;
       } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
         // Prosperity: portfolio very healthy — allow a spending raise.
-        // Bug 4 fix: guard currentWR > 0 so a depleted portfolio (CWR = 0) cannot
+        // guard currentWR > 0 so a depleted portfolio (CWR = 0) cannot
         // trigger an endless chain of 10% raises on non-existent money.
-        const newMult    = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
-        const factor     = newMult / state.spendMultiplier;
+        const newMult = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
+        const factor = newMult / state.spendMultiplier;
         state.spendMultiplier = newMult;
-        state.spend      *= factor;
+        state.spend *= factor;
         taxOwed = rmdAmount > grossBaseSpend
           ? state.spend * taxRate
           : state.spend - Math.max(0, baseSpend * factor);
@@ -716,9 +716,9 @@ const generateAuditLog = (
       }
     }
 
-    const startCash  = state.cash;
+    const startCash = state.cash;
     const startStock = state.stock;
-    const startBond  = state.bond;
+    const startBond = state.bond;
 
     const returns = annualReturns[year - 1];
 
@@ -748,28 +748,28 @@ const generateAuditLog = (
     log.push({
       year: startYear + year,
       startCash,
-      // Bug 3 fix: In Year 1, add the setup friction back to startStock so the
+      // In Year 1, add the setup friction back to startStock so the
       // logged start balance equals the user's original input portfolio. The matching
       // initialSetupCost is added to feesAmount below so the audit math
       // (Start + Growth − Fees − Draw = End) still balances exactly.
       startStock: year === 1 ? startStock + initialSetupCost : startStock,
       startBond,
-      stockReturn:       returns.stock,
-      bondReturn:        returns.bond,
-      cashReturn:        returns.cash,
+      stockReturn: returns.stock,
+      bondReturn: returns.bond,
+      cashReturn: returns.cash,
       realizedInflation: returns.inflation,
-      growthAmount:      outcome.growth,
-      feesAmount:        outcome.fees + (year === 1 ? initialSetupCost : 0),
-      action:            outcome.actionLog, // strategy-only mechanical action
+      growthAmount: outcome.growth,
+      feesAmount: outcome.fees + (year === 1 ? initialSetupCost : 0),
+      action: outcome.actionLog, // strategy-only mechanical action
       gkEvent,                              // G-K event isolated for styled badge rendering
-      withdrawal:        outcome.withdrawal,
-      taxPaid:           taxOwed,
-      endTotal:          outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
+      withdrawal: outcome.withdrawal,
+      taxPaid: taxOwed,
+      endTotal: outcome.nextState.stock + outcome.nextState.bond + outcome.nextState.cash,
       rmdAmount,
       nominalWithdrawal,
-      ssIncome:          ssIncomeThisYear,
-      spendMultiplier:   state.spendMultiplier, // current accumulated G-K factor this year
-      crashed:           returns.crashed,        // jump-diffusion flag for audit annotation
+      ssIncome: ssIncomeThisYear,
+      spendMultiplier: state.spendMultiplier, // current accumulated G-K factor this year
+      crashed: returns.crashed,        // jump-diffusion flag for audit annotation
     });
 
     // Compute total portfolio return for this year so the NEXT year's G-K direction
@@ -886,9 +886,9 @@ export const runSimulation = (
       // Update spend for the current phase before simulateYear consumes state.spend
       let baseSpend = getSpendingForYear(year, spendingPhases);
       // Detect spending phase transitions (mirrors generateAuditLog logic).
-      const rawPhaseSpend  = baseSpend;
-      const phaseChanged   = year > 0 && rawPhaseSpend !== prevRawPhaseSpend;
-      prevRawPhaseSpend    = rawPhaseSpend;
+      const rawPhaseSpend = baseSpend;
+      const phaseChanged = year > 0 && rawPhaseSpend !== prevRawPhaseSpend;
+      prevRawPhaseSpend = rawPhaseSpend;
 
       // --- RMD & Tax Gross-Up (mirrors generateAuditLog logic exactly) ---
       // year is 0-based here; add 1 to align with the 1-based convention in
@@ -903,7 +903,7 @@ export const runSimulation = (
       prevSsIncomeActive = ssActive;
       const isPhaseTransition = phaseChanged || ssIncomeJustActivated;
 
-      // Bug Fix: Reset the Guyton-Klinger penalty/bonus during Phase Transitions.
+      // Reset the Guyton-Klinger penalty/bonus during Phase Transitions.
       if (isPhaseTransition) {
         state.spendMultiplier = 1.0;
       }
@@ -914,7 +914,7 @@ export const runSimulation = (
       const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
 
       if (ssActive) {
-        // Bug 5 fix & 85% rule: SS income is not 100% tax-free for high-income retirees.
+        // 85% rule: SS income is not 100% tax-free for high-income retirees.
         // Under IRS rules, up to 85% of Social Security benefits can be taxed.
         baseSpend -= inputs.socialSecurityIncome * 12 * (1 - taxRate * 0.85);
       }
@@ -938,10 +938,10 @@ export const runSimulation = (
       let taxOwed: number;
       if (rmdThisYear > grossBaseSpend) {
         state.spend = rmdThisYear;
-        taxOwed     = rmdThisYear * taxRate;
+        taxOwed = rmdThisYear * taxRate;
       } else {
         state.spend = grossBaseSpend;
-        taxOwed     = grossBaseSpend - Math.max(0, baseSpend);
+        taxOwed = grossBaseSpend - Math.max(0, baseSpend);
       }
 
       // --- Guyton-Klinger Guardrail Check ---
@@ -949,16 +949,16 @@ export const runSimulation = (
       const currentWR = totalPreWithdrawal > 0.01 ? state.spend / totalPreWithdrawal : 0;
 
       if (year === 0 || isPhaseTransition) {
-        state.iwr             = currentWR;
+        state.iwr = currentWR;
         state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
         if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
-          const newMult         = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
-          const factor          = newMult / state.spendMultiplier;
+          const newMult = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
+          const factor = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
-          state.spend          *= factor;
-          // Bug 1 fix: never cut spending below the IRS RMD floor.
-          state.spend           = Math.max(state.spend, rmdThisYear);
+          state.spend *= factor;
+          // never cut spending below the IRS RMD floor.
+          state.spend = Math.max(state.spend, rmdThisYear);
           // Tax formula: if spending is at the RMD floor (original RMD floor or clamped
           // back up after the 10% cut), treat the full distribution as taxable.
           taxOwed = state.spend <= rmdThisYear + 1
@@ -966,12 +966,12 @@ export const runSimulation = (
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
         } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
-          // Bug 4 fix: currentWR > 0 prevents a depleted portfolio from triggering
+          // currentWR > 0 prevents a depleted portfolio from triggering
           // an endless loop of 10% raises (CWR = 0 always satisfies < 0.80 × IWR).
-          const newMult         = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
-          const factor          = newMult / state.spendMultiplier;
+          const newMult = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
+          const factor = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
-          state.spend          *= factor;
+          state.spend *= factor;
           taxOwed = rmdThisYear > grossBaseSpend
             ? state.spend * taxRate
             : state.spend - Math.max(0, baseSpend * factor);
@@ -1008,7 +1008,7 @@ export const runSimulation = (
     }
 
     const finalVal = state.stock + state.bond + state.cash;
-    
+
     // A run is considered a failure if it drops to $1 or below at ANY point,
     // even if later Social Security deposits technically made the balance positive again.
     const droppedToZero = currentRunTrajectory.some(val => val <= 1);
@@ -1056,12 +1056,12 @@ export const runSimulation = (
     // 1001st value (10.01th percentile).  Subtracting 1 from the ceiling
     // gives index 999 — exactly the 1000th value (10.00th percentile).
     // Use user-configured percentiles (clamped to valid 1–99 range).
-    const pDown  = Math.max(0.01, Math.min(0.99, inputs.percentileDownturn      / 100));
-    const pBelow = Math.max(0.01, Math.min(0.99, inputs.percentileBelowAverage  / 100));
-    const pAvg   = Math.max(0.01, Math.min(0.99, inputs.percentileAverage       / 100));
-    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pDown)  - 1]);
+    const pDown = Math.max(0.01, Math.min(0.99, inputs.percentileDownturn / 100));
+    const pBelow = Math.max(0.01, Math.min(0.99, inputs.percentileBelowAverage / 100));
+    const pAvg = Math.max(0.01, Math.min(0.99, inputs.percentileAverage / 100));
+    downturnCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pDown) - 1]);
     belowAverageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pBelow) - 1]);
-    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pAvg)   - 1]);
+    averageCurve.push(yearValues[Math.ceil(NUM_SIMULATIONS * pAvg) - 1]);
   }
 
   // Map $0 trajectories to null so Recharts renders a gap at depletion
@@ -1071,9 +1071,9 @@ export const runSimulation = (
 
   const chartData: YearResult[] = averageCurve.map((val, idx) => ({
     year: currentYear + idx + 1,
-    average:      toNullable(val),
+    average: toNullable(val),
     belowAverage: toNullable(belowAverageCurve[idx]),
-    downturn:     toNullable(downturnCurve[idx]),
+    downturn: toNullable(downturnCurve[idx]),
   }));
 
   chartData.unshift({
