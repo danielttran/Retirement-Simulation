@@ -6,6 +6,8 @@ interface SetupViewProps {
   onRun: (inputs: SimulationInputs) => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  hasResult?: boolean;
+  onShowResult?: () => void;
 }
 
 // Helper component for formatted numerical inputs
@@ -335,7 +337,9 @@ const SetupView: React.FC<SetupViewProps> = ({
   defaultInputs,
   onRun,
   isDarkMode,
-  onToggleDarkMode
+  onToggleDarkMode,
+  hasResult,
+  onShowResult
 }) => {
   const [formState, setFormState] = useState<SimulationInputs>(defaultInputs);
 
@@ -416,10 +420,16 @@ const SetupView: React.FC<SetupViewProps> = ({
 
   const validationErrors = getValidationErrors();
   const isValid = validationErrors.length === 0;
+  
+  const isChanged = JSON.stringify(defaultInputs) !== JSON.stringify(formState);
 
   const handleRunClick = () => {
     if (!isValid) return;
-    onRun(formState);
+    if (hasResult && !isChanged && onShowResult) {
+      onShowResult();
+    } else {
+      onRun(formState);
+    }
   };
 
   return (
@@ -724,13 +734,13 @@ const SetupView: React.FC<SetupViewProps> = ({
             <button
               onClick={handleRunClick}
               disabled={!isValid}
-              aria-label="Run Monte Carlo simulation"
+              aria-label={hasResult && !isChanged ? "Show Result" : "Run Monte Carlo simulation"}
               className={`group relative px-20 py-5 rounded-lg font-bold text-sm uppercase tracking-wider transition-all shadow-xl shadow-slate-200 dark:shadow-none overflow-hidden ${isValid
                 ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
                 : 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-600 cursor-not-allowed'
                 }`}
             >
-              <span className="relative z-10">Run Simulation</span>
+              <span className="relative z-10">{hasResult && !isChanged ? "Show Result" : "Run Simulation"}</span>
               {isValid && <div className="absolute inset-0 bg-primary/10 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>}
             </button>
             <p className="mt-6 text-[11px] font-semibold text-slate-300 dark:text-slate-600 uppercase tracking-wider transition-colors">100,000 Monte Carlo Simulations Per Strategy</p>

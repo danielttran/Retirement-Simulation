@@ -217,6 +217,11 @@ const App: React.FC = () => {
           onRun={handleRunSimulation}
           isDarkMode={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          hasResult={!!results}
+          onShowResult={() => {
+            setView('SIMULATION');
+            window.scrollTo(0, 0);
+          }}
         />
       )}
 
