@@ -218,36 +218,45 @@ ${auditSample}
     window.print();
   };
 
-  const handleDownloadCSV = () => {
-    // Honour the view-duration filter so the exported data matches what is
-    // shown on screen (e.g. if user chose "10 Years", CSV has 10 years too).
-    const dataToExport = viewDuration === 'MAX'
-      ? results.data
-      : results.data.filter(d => d.year <= startYear + viewDuration);
+  const handleDownloadCSV = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    try {
+      console.log('Download CSV clicked');
+      // Honour the view-duration filter so the exported data matches what is
+      // shown on screen (e.g. if user chose "10 Years", CSV has 10 years too).
+      const dataToExport = viewDuration === 'MAX'
+        ? results.data
+        : results.data.filter(d => d.year <= startYear + Number(viewDuration));
 
-    const headers = ['Year', 'Average Market', 'Below Average', 'Significant Downturn'];
-    const rows = dataToExport.map(d => [
-      d.year,
-      d.average != null ? d.average.toFixed(2) : '0.00',
-      d.belowAverage != null ? d.belowAverage.toFixed(2) : '0.00',
-      d.downturn != null ? d.downturn.toFixed(2) : '0.00'
-    ]);
+      console.log(`Exporting ${dataToExport.length} rows`);
 
+      const headers = ['Year', 'Average Market', 'Below Average', 'Significant Downturn'];
+      const rows = dataToExport.map(d => [
+        d.year,
+        d.average != null ? d.average.toFixed(2) : '0.00',
+        d.belowAverage != null ? d.belowAverage.toFixed(2) : '0.00',
+        d.downturn != null ? d.downturn.toFixed(2) : '0.00'
+      ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `retirement_simulation_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `retirement_simulation_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      console.log('Download triggered successfully.');
+    } catch (err) {
+      console.error('Download CSV failed', err);
+    }
   };
 
   const handleCustomSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
