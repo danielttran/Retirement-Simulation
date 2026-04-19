@@ -1137,9 +1137,11 @@ export const runSimulation = (
     const rawInitialSpend = getSpendingForYear(0, spendingPhases);
     const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(rawInitialSpend, totalStartPortfolio, inputs);
     const startCash = Math.min(totalStartPortfolio * 0.50, 2 * Math.max(grossedUpInitialSpend, 0));
-    dispCash = startCash / totalStartPortfolio;
-    dispStock = 1.0 - dispCash;
-    dispBond = 0;
+    if (totalStartPortfolio > 0) {
+      dispCash = startCash / totalStartPortfolio;
+      dispStock = 1.0 - dispCash;
+      dispBond = 0;
+    }
   }
 
   return {
