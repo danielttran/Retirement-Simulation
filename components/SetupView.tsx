@@ -322,6 +322,9 @@ const SpendingPhasesEditor: React.FC<SpendingPhasesEditorProps> = ({ phases, tim
 
 // ─── Sync helper: keep phases contiguous with the current time horizon ────────
 function syncPhasesToHorizon(phases: SpendingPhase[], horizon: number): SpendingPhase[] {
+  if (!Array.isArray(phases) || phases.length === 0) {
+    return [{ id: 1, startYear: 0, endYear: horizon, annualSpend: 30000 }];
+  }
   let updated = phases.filter(p => p.startYear < horizon);
   if (updated.length === 0) {
     updated = [{ ...phases[0], startYear: 0, endYear: horizon }];

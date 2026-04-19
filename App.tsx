@@ -8,6 +8,57 @@ import { SimulationInputs, StrategyType, SimulationResult } from './types';
 // The worker is instantiated lazily (once per session) inside runSimulationAsync.
 
 type View = 'SETUP' | 'SIMULATION';
+type RawSpendingPhase = Partial<{
+  id: number;
+  startYear: number;
+  endYear: number;
+  annualSpend: number;
+}>;
+
+const clampNumber = (value: unknown, min: number, max: number, fallback: number) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+};
+
+const sanitizeSpendingPhases = (rawPhases: unknown, horizon: number) => {
+  const safeHorizon = Math.max(1, Math.floor(Number(horizon) || 1));
+  const fallback = [{ id: 1, startYear: 0, endYear: safeHorizon, annualSpend: 30000 }];
+  if (!Array.isArray(rawPhases) || rawPhases.length === 0) return fallback;
+
+  const parsed = (rawPhases as RawSpendingPhase[])
+    .map((phase, index) => ({
+      id: Number.isFinite(phase?.id) ? Number(phase.id) : index + 1,
+      startYear: Math.max(0, Math.floor(Number(phase?.startYear) || 0)),
+      endYear: Math.max(1, Math.floor(Number(phase?.endYear) || safeHorizon)),
+      annualSpend: Math.max(0, Number(phase?.annualSpend) || 0),
+    }))
+    .sort((a, b) => a.startYear - b.startYear);
+
+  if (parsed.length === 0) return fallback;
+
+  const normalized: typeof parsed = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const phase = parsed[i];
+    const prev = normalized[i - 1];
+    const startYear = i === 0 ? 0 : Math.max(phase.startYear, prev.startYear + 1);
+    const maxEnd = i === parsed.length - 1 ? safeHorizon : safeHorizon - (parsed.length - i - 1);
+    const endYear = Math.max(startYear + 1, Math.min(maxEnd, phase.endYear));
+    normalized.push({ ...phase, startYear, endYear });
+  }
+
+  const withinHorizon = normalized.filter((p) => p.startYear < safeHorizon);
+  if (withinHorizon.length === 0) return fallback;
+
+  for (let i = 1; i < withinHorizon.length; i++) {
+    withinHorizon[i].startYear = withinHorizon[i - 1].endYear;
+    if (withinHorizon[i].endYear <= withinHorizon[i].startYear) {
+      withinHorizon[i].endYear = Math.min(safeHorizon, withinHorizon[i].startYear + 1);
+    }
+  }
+  withinHorizon[withinHorizon.length - 1].endYear = safeHorizon;
+  return withinHorizon;
+};
 
 // Loading overlay component
 const LoadingOverlay: React.FC = () => (
@@ -69,7 +120,37 @@ const App: React.FC = () => {
         const parsed = JSON.parse(saved);
         // Merge with defaults so that any newly added fields (CPA/Tax/SS) are 
         // present even if the user has an old cache from a previous version.
-        return { ...defaults, ...parsed };
+        const merged = { ...defaults, ...parsed };
+        const safeHorizon = Math.floor(clampNumber(merged.timeHorizon, 5, 50, defaults.timeHorizon));
+        const percentileAverage = Math.round(clampNumber(merged.percentileAverage, 3, 99, defaults.percentileAverage));
+        const percentileBelowAverage = Math.min(
+          percentileAverage - 1,
+          Math.round(clampNumber(merged.percentileBelowAverage, 2, 98, defaults.percentileBelowAverage))
+        );
+        const percentileDownturn = Math.min(
+          percentileBelowAverage - 1,
+          Math.round(clampNumber(merged.percentileDownturn, 1, 97, defaults.percentileDownturn))
+        );
+        return {
+          ...merged,
+          timeHorizon: safeHorizon,
+          initialCash: clampNumber(merged.initialCash, 0, Number.MAX_SAFE_INTEGER, defaults.initialCash),
+          initialInvestments: clampNumber(merged.initialInvestments, 0, Number.MAX_SAFE_INTEGER, defaults.initialInvestments),
+          inflationRate: clampNumber(merged.inflationRate, 0, 15, defaults.inflationRate),
+          expectedStockReturn: clampNumber(merged.expectedStockReturn, 0, 30, defaults.expectedStockReturn),
+          managementFee: clampNumber(merged.managementFee, 0, 5, defaults.managementFee),
+          customStockAllocation: Math.round(clampNumber(merged.customStockAllocation, 0, 100, defaults.customStockAllocation)),
+          currentAge: Math.round(clampNumber(merged.currentAge, 25, 85, defaults.currentAge)),
+          taxDeferredRatio: clampNumber(merged.taxDeferredRatio, 0, 100, defaults.taxDeferredRatio),
+          withdrawalTaxRate: clampNumber(merged.withdrawalTaxRate, 0, 60, defaults.withdrawalTaxRate),
+          birthYear: Math.round(clampNumber(merged.birthYear, 1900, new Date().getFullYear(), defaults.birthYear)),
+          socialSecurityIncome: clampNumber(merged.socialSecurityIncome, 0, Number.MAX_SAFE_INTEGER, defaults.socialSecurityIncome),
+          socialSecurityAge: Math.round(clampNumber(merged.socialSecurityAge, 50, 85, defaults.socialSecurityAge)),
+          percentileAverage,
+          percentileBelowAverage: Math.max(2, percentileBelowAverage),
+          percentileDownturn: Math.max(1, percentileDownturn),
+          spendingPhases: sanitizeSpendingPhases(merged.spendingPhases, safeHorizon),
+        };
       } catch (e) {
         console.error('Failed to parse cached inputs:', e);
       }
@@ -128,10 +209,20 @@ const App: React.FC = () => {
     const worker = getWorker();
 
     // Replace the message handler for this invocation (handles superseded runs).
-    worker.onmessage = (e: MessageEvent) => {
-      if (currentRunId !== runningIdRef.current) return;
+    worker.onmessage = (e: MessageEvent<{ type: 'result' | 'error'; requestId: number; result?: SimulationResult; message?: string }>) => {
+      // Critical race guard:
+      // With a single worker, messages are processed FIFO. If the user triggers run B
+      // while run A is still computing, run A's response can arrive after we've already
+      // installed run B's handler. We must therefore key off the worker's echoed
+      // requestId (not only the closure's currentRunId) so stale responses are ignored.
+      if (e.data.requestId !== runningIdRef.current || currentRunId !== runningIdRef.current) return;
       const { type } = e.data;
       if (type === 'result') {
+        if (!e.data.result) {
+          setSimulationError('Simulation worker returned an empty result payload.');
+          setIsSimulating(false);
+          return;
+        }
         setResults(e.data.result);
         // Only navigate / notify on success — mirrors the previous behaviour where
         // onComplete was not called inside `finally` to avoid stale-result navigation.
@@ -150,7 +241,7 @@ const App: React.FC = () => {
       setIsSimulating(false);
     };
 
-    worker.postMessage({ inputs: simInputs, strategy });
+    worker.postMessage({ requestId: currentRunId, inputs: simInputs, strategy });
   }, [getWorker]);
 
   const handleRunSimulation = (finalInputs: SimulationInputs) => {
@@ -184,6 +275,16 @@ const App: React.FC = () => {
       runSimulationAsync(inputs, selectedStrategy);
     }
   }, [selectedStrategy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    return () => {
+      if (sliderDebounceRef.current) clearTimeout(sliderDebounceRef.current);
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <>
