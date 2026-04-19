@@ -77,7 +77,10 @@ export interface SimulationResult {
   auditLogAverage: AuditRow[];
   auditLogBelowAverage: AuditRow[];
   auditLogDownturn: AuditRow[];
-  successRate: number; // Percentage of runs that didn't deplete
+  /** Zero-Touch Rate: % of runs where the portfolio NEVER touched $1 or below at any point during the horizon. This IS effectively the Bengen/FIRECalc survival definition for this model since depleted portfolios cannot recover. */
+  successRate: number;
+  /** Comfortable Survival Rate: % of runs where the portfolio ended with ≥ 25% of the real starting portfolio value. Lower than successRate — separates "survived but depleted" from "ended with meaningful reserves". */
+  terminalSuccessRate: number;
   finalMedianValue: number;
   volatility: number;
   allocation: {

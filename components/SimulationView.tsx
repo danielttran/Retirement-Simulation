@@ -138,7 +138,8 @@ All portfolio values are in real (today's) dollars; nominalWithdrawal for 1099-R
 Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowAverage} (gold), P${inputs.percentileDownturn} (red) of 100,000 runs
 
 --- SIMULATION RESULTS ---
-Success Rate: ${results.successRate.toFixed(1)}% (portfolio balance never fell to $1 or below at any point during the ${inputs.timeHorizon}-year term)
+Plan Success Rate: ${results.successRate.toFixed(1)}% — portfolio NEVER touched $1 or below at any point during the ${inputs.timeHorizon}-year horizon. Equivalent to the Bengen / FIRECalc "plan survived" definition in this model (depleted portfolios clamp to $0 and cannot recover, so any-point and end-of-term checks are identical).
+Comfortable Survival Rate: ${results.terminalSuccessRate.toFixed(1)}% — portfolio ended with ≥ 25% of the real starting balance ($${Math.round((inputs.initialCash + inputs.initialInvestments) * 0.25).toLocaleString()} threshold on a $${(inputs.initialCash + inputs.initialInvestments).toLocaleString()} portfolio). Lower than Plan Success Rate because some plans that technically survived ended nearly depleted.
 P${inputs.percentileAverage} Representative Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
 Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
 
@@ -333,10 +334,18 @@ ${auditSample}
               </span>
             </button>
             <div className="hidden md:flex items-center gap-3 px-5 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-full border border-slate-200 dark:border-slate-800 transition-colors">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">Success Rate</span>
-              <span className={`text-xs font-bold ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
-                {results.successRate.toFixed(1)}% ({results.successRate > 90 ? 'High' : results.successRate > 75 ? 'Moderate' : 'Low'})
-              </span>
+              <div className="flex flex-col items-end">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">Plan Success</span>
+                  <span className={`text-xs font-bold ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                    {results.successRate.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-slate-300 dark:text-slate-600 font-semibold uppercase tracking-wider">Comfortable</span>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{results.terminalSuccessRate.toFixed(1)}%</span>
+                </div>
+              </div>
             </div>
             <button
               onClick={handleExportReport}
@@ -1003,12 +1012,30 @@ ${auditSample}
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
-                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Success Probability</span>
-                <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 transition-colors">{results.successRate.toFixed(1)}%</span>
-                <span className={`text-xs font-bold flex items-center gap-1 mt-1 ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
-                  <span className="material-symbols-outlined text-xs">trending_up</span> {results.successRate > 90 ? 'High Confidence' : results.successRate > 75 ? 'Monitor Closely' : 'At Risk'}
+                {/* Primary — Plan Survival (Bengen equivalent for this model) */}
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Plan Success Rate</span>
+                <span className={`text-2xl font-bold transition-colors ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                  {results.successRate.toFixed(1)}%
                 </span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-tight">Percentage of the 100,000 simulations where the portfolio balance never fell to $1 or below at any point during the {inputs.timeHorizon}-year period &mdash; not just at the end. A single year of depletion counts as failure even if later income temporarily restored the balance.</p>
+                <span className={`text-xs font-bold flex items-center gap-1 ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                  <span className="material-symbols-outlined text-xs">trending_up</span>
+                  {results.successRate > 90 ? 'High Confidence' : results.successRate > 75 ? 'Monitor Closely' : 'At Risk'}
+                </span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 leading-tight">
+                  Portfolio never fully depleted (never touched $1 or below) across the full {inputs.timeHorizon}-year horizon. Equivalent to the Bengen / FIRECalc "plan survived" definition — in this model, depleted portfolios cannot recover, so any-point and end-of-term depletion are identical.
+                </p>
+                {/* Secondary — Comfortable Survival */}
+                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Comfortable Survival</span>
+                    <span className={`text-sm font-bold ${results.terminalSuccessRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.terminalSuccessRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                      {results.terminalSuccessRate.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 leading-tight">
+                    Stricter: portfolio ends with &ge;&nbsp;25% of its real starting value (${(Math.round((inputs.initialCash + inputs.initialInvestments) * 0.25)).toLocaleString()} floor). Separates plans that <em>just survived</em> from plans that ended with meaningful reserves.
+                  </p>
+                </div>
               </div>
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">P{inputs.percentileAverage} Final Portfolio Value</span>

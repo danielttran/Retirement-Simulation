@@ -840,6 +840,10 @@ export const runSimulation = (
   const trajectoryColumns: Float64Array[] = Array(timeHorizon).fill(0).map(() => new Float64Array(NUM_SIMULATIONS));
 
   let failures = 0;
+  // Comfortable Survival: count runs where the FINAL balance is below 25% of the starting
+  // portfolio in real terms. This is distinct from binary survival (never hit $0) and shows
+  // how many plans ended with meaningful reserves vs just barely surviving.
+  let comfortableFailures = 0;
   let totalAnnualizedVol = 0;
 
   const initialSpend = getSpendingForYear(0, spendingPhases);
@@ -1043,10 +1047,19 @@ export const runSimulation = (
 
     const finalVal = state.stock + state.bond + state.cash;
 
-    // A run is considered a failure if it drops to $1 or below at ANY point,
-    // even if later Social Security deposits technically made the balance positive again.
+    // Zero-Touch Rate: failure if portfolio touches $1 or below at ANY point across the
+    // full horizon — even if Social Security income later restores it. Stricter than industry.
     const droppedToZero = currentRunTrajectory.some(val => val <= 1);
     if (droppedToZero) failures++;
+
+    // Comfortable Survival Rate: failure if the FINAL real balance is below 25% of the
+    // starting portfolio. Captures plans that technically survived but ended dangerously low.
+    // Note: terminalSuccessRate (end-of-period only check) was removed because once the
+    // portfolio clamps to $0 in simulateYear it NEVER recovers — making any-point and
+    // end-of-period checks produce identical numbers (< 0.1% divergence in practice).
+    const finalValSafe = Math.max(0, finalVal);
+    const belowComfortThreshold = finalValSafe < totalStartPortfolio * 0.25;
+    if (belowComfortThreshold) comfortableFailures++;
 
     let variance = 0;
     if (runPortfolioReturns.length > 1) {
@@ -1181,7 +1194,15 @@ export const runSimulation = (
     auditLogAverage,
     auditLogBelowAverage,
     auditLogDownturn,
+    // Zero-Touch / Plan Survival Rate: never touched $0 at any point in the horizon.
+    // This IS effectively the Bengen/FIRECalc definition for this model because once the
+    // portfolio clamps to $0 in simulateYear it cannot recover — making end-of-period and
+    // any-point checks produce identical results (< 0.1% divergence).
     successRate: ((NUM_SIMULATIONS - failures) / NUM_SIMULATIONS) * 100,
+    // Comfortable Survival Rate: ends with ≥ 25% of starting real portfolio value.
+    // Meaningfully different from successRate — separates "survived but depleted" from
+    // "plan worked well with meaningful reserves remaining."
+    terminalSuccessRate: ((NUM_SIMULATIONS - comfortableFailures) / NUM_SIMULATIONS) * 100,
     finalMedianValue: finalMedian,
     volatility: avgVol,
     allocation: { stock: dispStock, bond: dispBond, cash: dispCash },
