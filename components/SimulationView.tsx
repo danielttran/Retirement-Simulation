@@ -155,6 +155,181 @@ ${auditSample}
 `;
   }, [inputs, results, selectedStrategy, startYear]);
 
+  // Strategy-adaptive plain-language explanation of the simulation for two audiences.
+  // Recalculates whenever inputs, results, or the selected strategy change.
+  const planExplanation = useMemo(() => {
+    const totalPortfolio = (inputs.initialCash ?? 0) + (inputs.initialInvestments ?? 0);
+    const initialSpend = inputs.spendingPhases[0]?.annualSpend ?? 0;
+    const withdrawalRatePct = totalPortfolio > 0 ? ((initialSpend / totalPortfolio) * 100).toFixed(2) : '—';
+    const successRate = results.successRate.toFixed(1);
+    const comfortRate = results.comfortableSurvivalRate.toFixed(1);
+    const finalValue = results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const volatility = results.volatility.toFixed(1);
+    const comfortFloor = Math.round(results.comfortFloorValue).toLocaleString();
+    const endYear = startYear + inputs.timeHorizon;
+    const hasSS = (inputs.socialSecurityIncome ?? 0) > 0;
+    const hasRMD = inputs.taxDeferredRatio > 0;
+    const hasMultiPhase = inputs.spendingPhases.length > 1;
+    const blendedTaxRate = ((inputs.withdrawalTaxRate / 100) * (inputs.taxDeferredRatio / 100) * 100).toFixed(1);
+
+    // --- Strategy-specific language ---
+    const strategyNameFull = getStrategyLabel(selectedStrategy);
+    let strategyMechanicsCPA = '';
+    let strategyMechanicsSimple = '';
+    if (selectedStrategy === 'BUCKET') {
+      strategyMechanicsCPA =
+        `The Bucket Strategy bifurcates the portfolio into a liquid cash buffer (≈2× the grossed-up annual withdrawal, ` +
+        `capped at 50% of total assets to preserve the growth engine) and an equity growth sleeve. ` +
+        `In up-market years (positive stock return), the engine sells equity gains to refill the cash buffer to the target level. ` +
+        `In down-market years, the cash buffer is drawn down directly — no equity is liquidated — providing a natural sequence-of-returns hedge. ` +
+        `Equities are sold in a downturn only when the cash buffer is insufficient to cover the grossed-up spending need.`;
+      strategyMechanicsSimple =
+        `Your money is split into two buckets. One bucket holds safe cash — about 2 years of living expenses — ` +
+        `that you can spend without selling investments. The other bucket is invested in stocks for long-term growth. ` +
+        `When the stock market is up, the simulation automatically sells some gains to refill your cash bucket. ` +
+        `When the market is down, you spend from the cash bucket and leave your stocks alone so they have time to recover. ` +
+        `This protects you from being forced to sell investments at the worst possible moment.`;
+    } else {
+      const stockPct = selectedStrategy === 'CONSERVATIVE' ? 60 : selectedStrategy === 'AGGRESSIVE' ? 70 : inputs.customStockAllocation;
+      const bondPct = 100 - stockPct;
+      strategyMechanicsCPA =
+        `The ${strategyNameFull} maintains a target equity/fixed-income ratio of ${stockPct}%/${bondPct}% subject to a ±5% absolute drift band. ` +
+        `Within the band, withdrawals are sourced proportionally without triggering a rebalance trade (minimizing transaction friction). ` +
+        `Outside the band, a full rebalance is executed, realigning the portfolio to target weights and imposing a 0.05% transaction cost on the rebalanced notional. ` +
+        `This drift-band discipline naturally enforces a contrarian "sell high, buy low" mechanic at each rebalance event.`;
+      strategyMechanicsSimple =
+        `Your savings are split ${stockPct}% in stocks and ${bondPct}% in bonds, and the simulation keeps that mix steady. ` +
+        `If the split drifts a little (within 5%), we just withdraw normally — no unnecessary trades. ` +
+        `If the mix drifts more than 5%, the simulation automatically sells what grew too much and buys what fell behind, ` +
+        `getting your balance back to ${stockPct}/${bondPct}. ` +
+        `This built-in discipline means you're always "selling high and buying low" without having to think about it.`;
+    }
+
+    // --- Guyton-Klinger note ---
+    const gkCPA =
+      `Guyton-Klinger (G-K) dynamic withdrawal guardrails are applied per-year: ` +
+      `if the current withdrawal rate (CWR) exceeds 120% of the initial withdrawal rate (IWR) in a year with a negative prior-year total portfolio return, spending is cut by 10% for exactly one year (Safety Rule). ` +
+      `Conversely, if CWR falls below 80% of IWR in a year with a positive prior-year return, spending is raised by 10% for exactly one year (Prosperity Rule). ` +
+      `The IWR baseline resets at each voluntary spending phase transition and upon first Social Security activation, preventing stale baselines from incorrectly triggering guardrails.`;
+    const gkSimple =
+      `The simulation includes a built-in spending safety net. If your portfolio is shrinking faster than expected during a bad market year, ` +
+      `it automatically trims your spending by 10% for that one year to protect your savings. ` +
+      `On the flip side, if the market is doing really well and your savings are healthier than expected, ` +
+      `it allows you to spend 10% more for that year. These are one-year adjustments — not permanent changes.`;
+
+    // --- Social Security / RMD notes ---
+    const ssCPA = hasSS
+      ? `Social Security income of $${(inputs.socialSecurityIncome ?? 0).toLocaleString()}/mo begins at age ${inputs.socialSecurityAge} (simulation year ${inputs.socialSecurityAge - inputs.currentAge}). ` +
+        `Per IRS provisional income rules, up to 85% of the benefit is modeled as taxable at the user's withdrawal tax rate (${inputs.withdrawalTaxRate}%), ` +
+        `reducing the net portfolio offset to $${(inputs.socialSecurityIncome * 12 * (1 - (inputs.withdrawalTaxRate / 100) * 0.85)).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr. ` +
+        `The G-K IWR baseline is reset in the first year of SS activation to prevent an artificial Prosperity trigger from the step-down in net portfolio withdrawals.`
+      : `No Social Security or pension income is modeled in this simulation.`;
+
+    const ssSimple = hasSS
+      ? `Once you reach age ${inputs.socialSecurityAge}, your $${(inputs.socialSecurityIncome ?? 0).toLocaleString()}/mo Social Security benefit starts reducing how much the simulation needs to pull from your investments. ` +
+        `Because part of Social Security is taxable (up to 85% based on IRS rules), the actual savings to your portfolio is slightly less than the full benefit amount.`
+      : `This simulation does not include Social Security or pension income. If you expect to receive benefits in the future, re-run with that income entered to see how it changes your results.`;
+
+    const rmdCPA = hasRMD
+      ? `RMDs are computed annually per IRS Pub. 590-B / SECURE 2.0 Uniform Lifetime Table using the user's birth year (${inputs.birthYear}) to determine the applicable RMD start age ` +
+        `(age 72 for born ≤1950; age 73 for born 1951–1959; age 75 for born ≥1960). ` +
+        `The RMD is treated as a mandatory withdrawal floor: when the grossed-up spending need is less than the RMD, the RMD amount is used instead, ` +
+        `and the full RMD is subject to ordinary income tax at the stated withdrawal rate (${inputs.withdrawalTaxRate}%). ` +
+        `The blended effective drag on withdrawals is ${blendedTaxRate}% (= ${inputs.withdrawalTaxRate}% × ${inputs.taxDeferredRatio}% pre-tax ratio).`
+      : `No tax-deferred accounts are modeled (tax-deferred ratio = 0%). RMDs are not applicable. All withdrawals are treated as tax-free.`;
+
+    const rmdSimple = hasRMD
+      ? `Because ${inputs.taxDeferredRatio}% of your portfolio is in a Traditional IRA or 401(k), ` +
+        `the IRS requires you to take out a minimum amount each year starting at a certain age (based on your birth year of ${inputs.birthYear}). ` +
+        `This Required Minimum Distribution (RMD) can't be avoided — if your planned spending is less than the RMD, the simulation withdraws the larger amount and pays tax on it. ` +
+        `The simulation also grosses up all withdrawals from pre-tax accounts to cover your estimated ${inputs.withdrawalTaxRate}% effective tax rate, so your spending plan reflects what actually stays in your pocket.`
+      : `Your portfolio has no pre-tax accounts (like a Traditional IRA or 401(k)), so there are no Required Minimum Distributions (RMDs). All withdrawals are assumed to be tax-free, which simplifies the math significantly.`;
+
+    const multiPhaseCPA = hasMultiPhase
+      ? `The plan uses ${inputs.spendingPhases.length} spending phases: ` +
+        inputs.spendingPhases.map(p => `Year ${p.startYear + 1}–${p.endYear}: $${(p.annualSpend ?? 0).toLocaleString()}/yr`).join('; ') +
+        `. The G-K IWR baseline resets at each phase boundary to prevent cross-phase interference.`
+      : `A single spending phase of $${initialSpend.toLocaleString()}/yr is applied across the full ${inputs.timeHorizon}-year horizon.`;
+
+    const multiPhaseSimple = hasMultiPhase
+      ? `Your spending plan changes over time: ` +
+        inputs.spendingPhases.map(p => `Years ${p.startYear + 1}–${p.endYear} you plan to spend $${(p.annualSpend ?? 0).toLocaleString()}/yr`).join(', then ') +
+        `. The simulation handles each change cleanly — the safety guardrails reset so a planned spending drop doesn't accidentally look like a financial emergency.`
+      : `You plan to spend $${initialSpend.toLocaleString()} per year for the entire ${inputs.timeHorizon}-year period. All values are in today's dollars, so inflation is already built into the math.`;
+
+    // --- Build final objects ---
+    const cpaText = [
+      `STRATEGY: ${strategyNameFull}`,
+      `VERDICT: Success ${successRate}% (zero-touch) | Comfortable Survival ${comfortRate}% | IWR ${withdrawalRatePct}% | Vol ${volatility}%`,
+      ``,
+      `PORTFOLIO MECHANICS`,
+      strategyMechanicsCPA,
+      ``,
+      `WITHDRAWAL MECHANICS`,
+      multiPhaseCPA,
+      `Initial withdrawal rate: ${withdrawalRatePct}% (pre-tax, pre-SS, pre-G-K). ` +
+      `Blended effective tax drag: ${blendedTaxRate}% per withdrawal.`,
+      gkCPA,
+      ``,
+      `INCOME & REGULATORY ITEMS`,
+      ssCPA,
+      rmdCPA,
+      ``,
+      `SIMULATION RESULTS INTERPRETATION`,
+      `Plan Success Rate (${successRate}%): zero-touch binary pass/fail — portfolio never touched ≤$1 at any point across the ${inputs.timeHorizon}-year horizon. This is a stricter criterion than industry-standard "ending balance > $0".`,
+      `Comfortable Survival Rate (${comfortRate}%): portfolio ends with ≥25% of the strategy-adjusted post-setup starting balance ($${comfortFloor} comfort floor). Captures plans that technically survived but are dangerously depleted at end of horizon.`,
+      `P${inputs.percentileAverage} representative final balance: $${finalValue} in today's dollars (real terms, inflation-adjusted).`,
+      `Annualized portfolio volatility: ${volatility}% (long-run S&P 500 benchmark: ~17%).`,
+      ``,
+      `ENGINE PARAMETERS (FIXED, NOT USER-CONFIGURABLE)`,
+      `100,000-path Monte Carlo; log-normal equity returns with Cholesky correlation (Stock–Bond ρ=−0.15; Stock–Inflation ρ=−0.30); ` +
+      `Merton (1976) jump-diffusion for tail risk (λ=2%/yr, severity=20–40% equity drawdown); ` +
+      `stochastic inflation N(${inputs.inflationRate}%, 1.5%²) per year; ` +
+      `transaction cost 0.05% on all rebalance/sell/buy trades. All displayed balances in real (today's) dollars.`,
+    ].join('\n');
+
+    const simpleText = [
+      `WHAT IS THIS PLAN?`,
+      `You are testing a ${inputs.timeHorizon}-year retirement plan starting in ${startYear} with a total portfolio of $${totalPortfolio.toLocaleString()}. ` +
+      `The simulation ran 100,000 possible market futures — some great, some terrible — to show how your plan holds up across all of them.`,
+      ``,
+      `YOUR INVESTMENT STRATEGY: ${strategyNameFull}`,
+      strategyMechanicsSimple,
+      ``,
+      `YOUR SPENDING PLAN`,
+      multiPhaseSimple,
+      ``,
+      `HOW YOUR PORTFOLIO IS PROTECTED`,
+      gkSimple,
+      ``,
+      `SOCIAL SECURITY & TAXES`,
+      ssSimple,
+      rmdSimple,
+      ``,
+      `WHAT DO YOUR RESULTS MEAN?`,
+      `Plan Success Rate — ${successRate}%: In ${successRate}% of all possible futures, your portfolio never ran out of money — ` +
+      `not even for a single year across the full ${inputs.timeHorizon}-year horizon. ` +
+      `${results.successRate >= 90 ? 'This is a very strong result. Most financial planners consider 90%+ to be excellent.' : results.successRate >= 75 ? 'This is a reasonable result, but worth monitoring. Consider stress-testing with a lower spending target.' : 'This result is a warning sign. A success rate below 75% means your plan is at real risk of running out of money. Consider reducing spending, delaying retirement, or increasing savings.'}`,
+      ``,
+      `Comfortable Survival Rate — ${comfortRate}%: This is a tougher test. In ${comfortRate}% of simulated futures, ` +
+      `your portfolio not only survived — it ended with at least 25% of your starting balance still remaining (at least $${comfortFloor}). ` +
+      `This matters because a plan that "just barely survives" is very different from one that ends with a healthy cushion.`,
+      ``,
+      `Average-Case Final Balance: In a typical scenario, your portfolio would end at $${finalValue} by ${endYear}, measured in today's purchasing power.`,
+      ``,
+      `One more thing: All dollar amounts on this screen are in today's dollars — inflation is already built into the math, ` +
+      `so the numbers reflect what your money can actually buy, not just the number on the account statement.`,
+      ``,
+      `WHAT TO DO NEXT`,
+      results.successRate >= 75
+        ? `Your plan looks solid. Review it annually or after any major life change — a new job, a health event, or a big market swing. Small adjustments early are much easier than large ones later.`
+        : `Consider one or more of these moves to improve your odds: lower your target spending, delay retirement by a few years, or increase your savings rate now. Even small changes compound significantly over time.`,
+    ].join('\n');
+
+    return { cpaText, simpleText };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputs, results, selectedStrategy, startYear]);
+
 
   const runTime = new Date(results.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -519,6 +694,66 @@ ${auditSample}
                     {aiPromptText}
                   </pre>
                 </div>
+              </div>
+
+              {/* ── Plan Explanation Card ─────────────────────────────── */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden transition-all duration-300">
+                {/* CPA Section */}
+                <details>
+                  <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors list-none">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base text-indigo-600 dark:text-indigo-400">account_balance</span>
+                      <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">For CPAs &amp; Advisors</p>
+                    </div>
+                    <span className="material-symbols-outlined text-sm text-slate-400 dark:text-slate-500">expand_more</span>
+                  </summary>
+                  <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500 mb-2 italic">Technical notation — IRS citations, engine parameters, and precise mechanics.</p>
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded p-3 border border-slate-100 dark:border-slate-700">
+                      <pre className="text-[10px] text-slate-600 dark:text-slate-400 whitespace-pre-wrap font-mono leading-relaxed">
+                        {planExplanation.cpaText}
+                      </pre>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(planExplanation.cpaText)}
+                      className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                      title="Copy CPA explanation"
+                    >
+                      <span className="material-symbols-outlined text-xs">content_copy</span>
+                      Copy
+                    </button>
+                  </div>
+                </details>
+
+                {/* Divider */}
+                <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                {/* Plain-Language Section */}
+                <details>
+                  <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors list-none">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base text-teal-600 dark:text-teal-400">lightbulb</span>
+                      <p className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Plain English Explanation</p>
+                    </div>
+                    <span className="material-symbols-outlined text-sm text-slate-400 dark:text-slate-500">expand_more</span>
+                  </summary>
+                  <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500 mb-2 italic">Approachable language — what this plan does, what your numbers mean, and what to watch for.</p>
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded p-3 border border-slate-100 dark:border-slate-700">
+                      <pre className="text-[10px] text-slate-600 dark:text-slate-400 whitespace-pre-wrap font-mono leading-relaxed">
+                        {planExplanation.simpleText}
+                      </pre>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(planExplanation.simpleText)}
+                      className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                      title="Copy plain English explanation"
+                    >
+                      <span className="material-symbols-outlined text-xs">content_copy</span>
+                      Copy
+                    </button>
+                  </div>
+                </details>
               </div>
             </aside>
           )}
