@@ -631,7 +631,7 @@ ${auditSample}
         <div className="grid grid-cols-12 gap-5">
           {/* Sidebar Insights (Moved to Left) */}
           {isSidebarOpen && (
-            <aside className="col-span-12 lg:col-span-3 space-y-8">
+            <aside className="col-span-12 lg:col-span-3 space-y-4">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 shadow-sm relative overflow-hidden transition-all duration-300">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 dark:bg-primary/5 rounded-full -mr-16 -mt-16 transition-colors"></div>
                 <div className="relative">
@@ -696,16 +696,23 @@ ${auditSample}
                 </div>
               </div>
 
-              {/* ── Plan Explanation Card ─────────────────────────────── */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden transition-all duration-300">
-                {/* CPA Section */}
-                <details>
+                <details open>
                   <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors list-none">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-base text-indigo-600 dark:text-indigo-400">account_balance</span>
                       <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">For CPAs &amp; Advisors</p>
                     </div>
-                    <span className="material-symbols-outlined text-sm text-slate-400 dark:text-slate-500">expand_more</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigator.clipboard.writeText(planExplanation.cpaText); }}
+                        className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                        title="Copy CPA explanation"
+                      >
+                        <span className="material-symbols-outlined text-sm">content_copy</span>
+                      </button>
+                      <span className="material-symbols-outlined text-sm text-slate-400 dark:text-slate-500">expand_more</span>
+                    </div>
                   </summary>
                   <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800">
                     <p className="text-[9px] text-slate-400 dark:text-slate-500 mb-2 italic">Technical notation — IRS citations, engine parameters, and precise mechanics.</p>
@@ -714,28 +721,28 @@ ${auditSample}
                         {planExplanation.cpaText}
                       </pre>
                     </div>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(planExplanation.cpaText)}
-                      className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                      title="Copy CPA explanation"
-                    >
-                      <span className="material-symbols-outlined text-xs">content_copy</span>
-                      Copy
-                    </button>
                   </div>
                 </details>
+              </div>
 
-                {/* Divider */}
-                <div className="border-t border-slate-100 dark:border-slate-800" />
-
-                {/* Plain-Language Section */}
-                <details>
+              {/* ── Plain English Card ────────────────────────────────── */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden transition-all duration-300">
+                <details open>
                   <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors list-none">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-base text-teal-600 dark:text-teal-400">lightbulb</span>
                       <p className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Plain English Explanation</p>
                     </div>
-                    <span className="material-symbols-outlined text-sm text-slate-400 dark:text-slate-500">expand_more</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigator.clipboard.writeText(planExplanation.simpleText); }}
+                        className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                        title="Copy plain English explanation"
+                      >
+                        <span className="material-symbols-outlined text-sm">content_copy</span>
+                      </button>
+                      <span className="material-symbols-outlined text-sm text-slate-400 dark:text-slate-500">expand_more</span>
+                    </div>
                   </summary>
                   <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800">
                     <p className="text-[9px] text-slate-400 dark:text-slate-500 mb-2 italic">Approachable language — what this plan does, what your numbers mean, and what to watch for.</p>
@@ -744,14 +751,6 @@ ${auditSample}
                         {planExplanation.simpleText}
                       </pre>
                     </div>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(planExplanation.simpleText)}
-                      className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
-                      title="Copy plain English explanation"
-                    >
-                      <span className="material-symbols-outlined text-xs">content_copy</span>
-                      Copy
-                    </button>
                   </div>
                 </details>
               </div>
