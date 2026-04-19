@@ -83,6 +83,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   // consistent even if the component renders after a calendar-year boundary.
   const startYear = results.data.length > 0 ? results.data[0].year : new Date().getFullYear();
 
+  const getStrategyLabel = (s: StrategyType): string => {
+    switch (s) {
+      case 'BUCKET': return 'Bucket Strategy';
+      case 'CONSERVATIVE': return '60/40 Split (60% Stock / 40% Bond)';
+      case 'AGGRESSIVE': return '70/30 Split (70% Stock / 30% Bond)';
+      case 'CUSTOM': return `Custom Allocation (${inputs.customStockAllocation}% Stock / ${100 - inputs.customStockAllocation}% Bond)`;
+    }
+  };
+
   const aiPromptText = useMemo(() => {
     const auditRows = results.auditLogAverage;
     const auditSample = auditRows.slice(0, 10).map(r =>
@@ -155,15 +164,6 @@ ${auditSample}
     if (abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(1)}M`;
     if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
     return `${sign}$${Math.round(abs).toLocaleString()}`;
-  };
-
-  const getStrategyLabel = (s: StrategyType): string => {
-    switch (s) {
-      case 'BUCKET': return 'Bucket Strategy';
-      case 'CONSERVATIVE': return '60/40 Split (60% Stock / 40% Bond)';
-      case 'AGGRESSIVE': return '70/30 Split (70% Stock / 30% Bond)';
-      case 'CUSTOM': return `Custom Allocation (${inputs.customStockAllocation}% Stock / ${100 - inputs.customStockAllocation}% Bond)`;
-    }
   };
 
   const getStrategyDescription = (s: StrategyType) => {
