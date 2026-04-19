@@ -138,8 +138,8 @@ All portfolio values are in real (today's) dollars; nominalWithdrawal for 1099-R
 Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowAverage} (gold), P${inputs.percentileDownturn} (red) of 100,000 runs
 
 --- SIMULATION RESULTS ---
-Plan Success Rate: ${results.successRate.toFixed(1)}% — portfolio NEVER touched $1 or below at any point during the ${inputs.timeHorizon}-year horizon. Equivalent to the Bengen / FIRECalc "plan survived" definition in this model (depleted portfolios clamp to $0 and cannot recover, so any-point and end-of-term checks are identical).
-Comfortable Survival Rate: ${results.terminalSuccessRate.toFixed(1)}% — portfolio ended with ≥ 25% of the real starting balance ($${Math.round((inputs.initialCash + inputs.initialInvestments) * 0.25).toLocaleString()} threshold on a $${(inputs.initialCash + inputs.initialInvestments).toLocaleString()} portfolio). Lower than Plan Success Rate because some plans that technically survived ended nearly depleted.
+Plan Success Rate (Zero-Touch): ${results.successRate.toFixed(1)}% — portfolio NEVER touched $1 or below at any point during the ${inputs.timeHorizon}-year horizon.
+Comfortable Survival Rate: ${results.terminalSuccessRate.toFixed(1)}% — portfolio ended with ≥ 25% of the strategy-adjusted starting balance ($${Math.round(results.comfortFloorValue).toLocaleString()} comfort floor). Lower than Plan Success Rate because some plans that technically survived still ended nearly depleted.
 P${inputs.percentileAverage} Representative Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
 Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
 
@@ -1012,7 +1012,7 @@ ${auditSample}
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 hover:shadow-md transition-all duration-300">
-                {/* Primary — Plan Survival (Bengen equivalent for this model) */}
+                {/* Primary — Zero-touch plan survival */}
                 <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Plan Success Rate</span>
                 <span className={`text-2xl font-bold transition-colors ${results.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
                   {results.successRate.toFixed(1)}%
@@ -1022,7 +1022,7 @@ ${auditSample}
                   {results.successRate > 90 ? 'High Confidence' : results.successRate > 75 ? 'Monitor Closely' : 'At Risk'}
                 </span>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 leading-tight">
-                  Portfolio never fully depleted (never touched $1 or below) across the full {inputs.timeHorizon}-year horizon. Equivalent to the Bengen / FIRECalc "plan survived" definition — in this model, depleted portfolios cannot recover, so any-point and end-of-term depletion are identical.
+                  Portfolio never touched $1 or below across the full {inputs.timeHorizon}-year horizon. This is a stricter "zero-touch" pass condition, useful for stress-testing withdrawal durability.
                 </p>
                 {/* Secondary — Comfortable Survival */}
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -1033,7 +1033,7 @@ ${auditSample}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 leading-tight">
-                    Stricter: portfolio ends with &ge;&nbsp;25% of its real starting value (${(Math.round((inputs.initialCash + inputs.initialInvestments) * 0.25)).toLocaleString()} floor). Separates plans that <em>just survived</em> from plans that ended with meaningful reserves.
+                    Stricter: portfolio ends with &ge;&nbsp;25% of its strategy-adjusted starting value (${Math.round(results.comfortFloorValue).toLocaleString()} floor). Separates plans that <em>just survived</em> from plans that ended with meaningful reserves.
                   </p>
                 </div>
               </div>
