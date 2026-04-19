@@ -481,7 +481,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Birth Year</label>
                 <input
                   type="number"
-                  min="1900" max="2100"
+                  min="1900" max={new Date().getFullYear()}
                   className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-800 dark:text-slate-100 focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-medium"
                   value={formState.birthYear}
                   onChange={(e) => updateField('birthYear', parseInt(e.target.value) || 0)}

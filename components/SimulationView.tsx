@@ -83,6 +83,15 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   // consistent even if the component renders after a calendar-year boundary.
   const startYear = results.data.length > 0 ? results.data[0].year : new Date().getFullYear();
 
+  const getStrategyLabel = (s: StrategyType): string => {
+    switch (s) {
+      case 'BUCKET': return 'Bucket Strategy';
+      case 'CONSERVATIVE': return '60/40 Split (60% Stock / 40% Bond)';
+      case 'AGGRESSIVE': return '70/30 Split (70% Stock / 30% Bond)';
+      case 'CUSTOM': return `Custom Allocation (${inputs.customStockAllocation}% Stock / ${100 - inputs.customStockAllocation}% Bond)`;
+    }
+  };
+
   const aiPromptText = useMemo(() => {
     const auditRows = results.auditLogAverage;
     const auditSample = auditRows.slice(0, 10).map(r =>
@@ -105,7 +114,7 @@ Social Security: $${(inputs.socialSecurityIncome ?? 0).toLocaleString()}/mo star
 ${inputs.spendingPhases.map(p => `  Year ${p.startYear + 1}–${p.endYear}: $${(p.annualSpend ?? 0).toLocaleString()}/yr (in today's dollars)`).join('\n')}
 
 --- STRATEGY ---
-Selected Strategy: ${selectedStrategy}
+Selected Strategy: ${getStrategyLabel(selectedStrategy)}
 Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(results.allocation.bond * 100).toFixed(1)}% Bond / ${(results.allocation.cash * 100).toFixed(1)}% Cash
 
 --- SIMULATION MODEL (for your reference) ---
@@ -134,7 +143,7 @@ P${inputs.percentileAverage} Representative Final Value (real today's $): $${res
 Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
 
 --- AUDIT LOG SAMPLE — P${inputs.percentileAverage} Run, First 10 Years ---
-(All $ in real today's dollars. Verify: Start + Growth − Fees − Withdrawal = End)
+(All $ in real today's dollars. Math check: Start + Growth − Fees − Total Draw = End; Total Draw = Spend + Tax withheld)
 ${auditSample}
 
 --- QUESTIONS FOR YOUR REVIEW ---
@@ -157,15 +166,6 @@ ${auditSample}
     return `${sign}$${Math.round(abs).toLocaleString()}`;
   };
 
-  const getStrategyName = (s: StrategyType) => {
-    switch (s) {
-      case 'BUCKET': return 'Bucket Strategy';
-      case 'CONSERVATIVE': return '60/40 Split';
-      case 'AGGRESSIVE': return '70/30 Split';
-      case 'CUSTOM': return 'Custom Allocation';
-    }
-  };
-
   const getStrategyDescription = (s: StrategyType) => {
     if (s === 'BUCKET') {
       return (
@@ -174,14 +174,14 @@ ${auditSample}
             This strategy divides your portfolio into two distinct buckets to mitigate risk:
           </p>
           <ul className="list-disc pl-4 space-y-2 mb-4">
-            <li><strong>Cash Bucket:</strong> Holds 2 years of living expenses in safe, liquid assets.</li>
+            <li><strong>Cash Bucket:</strong> Holds approximately 2 years of grossed-up living expenses (including estimated taxes on pre-tax withdrawals) in safe, liquid assets.</li>
             <li><strong>Growth Bucket:</strong> The remainder is invested in equities for long-term growth.</li>
           </ul>
           <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation:</p>
           <ol className="list-decimal pl-4 space-y-2">
             <li>If the market is <strong>UP</strong> (Stock Up), we sell stocks (preferring gains) to refill the Cash Bucket back to 2 years.</li>
             <li>If the market is <strong>DOWN</strong> (Stock Down), we <strong>do not sell stocks</strong>. We spend directly from the Cash Bucket, allowing stocks time to recover.</li>
-            <li>Stocks are only sold in a downturn if the Cash Bucket is completely empty.</li>
+            <li>Stocks are only sold in a downturn if the Cash Bucket has insufficient funds to cover that year's spending need.</li>
           </ol>
         </>
       );
@@ -231,7 +231,7 @@ ${auditSample}
 
       console.log(`Exporting ${dataToExport.length} rows`);
 
-      const headers = ['Year', 'Average Market', 'Below Average', 'Significant Downturn'];
+      const headers = ['Year', 'Average Market', 'Below Average', 'Downturn'];
       const rows = dataToExport.map(d => [
         d.year,
         d.average != null ? d.average.toFixed(2) : '0.00',
@@ -362,7 +362,7 @@ ${auditSample}
             <div className="flex flex-col">
               <span className="text-[11px] uppercase font-semibold text-slate-400 dark:text-slate-500 tracking-wider">Initial Annual Spend</span>
               <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                {inputs.spendingPhases[0]?.annualSpend?.toLocaleString() ?? '—'}
+                ${inputs.spendingPhases[0]?.annualSpend?.toLocaleString() ?? '—'}
                 {inputs.spendingPhases.length > 1 && (
                   <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500 ml-1">
                     +{inputs.spendingPhases.length - 1} tier{inputs.spendingPhases.length > 2 ? 's' : ''}
@@ -563,7 +563,7 @@ ${auditSample}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-downturn-red"></span>
-                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Significant Downturn</span>
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Downturn</span>
                     </div>
                   </div>
                 </div>
@@ -651,7 +651,7 @@ ${auditSample}
                     <Area
                       type="monotone"
                       dataKey="downturn"
-                      name="Significant Downturn"
+                      name="Downturn"
                       stroke="#dc2626"
                       strokeWidth={1}
                       fillOpacity={1}
@@ -1048,7 +1048,7 @@ ${auditSample}
                   {([
                     { label: 'Inflation Volatility', value: '1.5% std dev', note: `Annual fluctuation jumping up or down around your expected average of ${inputs.inflationRate}%` },
                     { label: 'Market Relationships', value: '\u22120.30 Correlation', note: 'When stocks have a bad year, inflation tends to be slightly lower (e.g., during recessions). The simulation models this with a \u22120.30 correlation between stock returns and inflation draws.' },
-                    { label: 'Market Crash Probability', value: '2% / year', note: 'A black-swan event; about a 55% chance of occurring over a 40-year lifetime' },
+                    { label: 'Market Crash Probability', value: '2% / year', note: `A black-swan event; about ${(100 * (1 - Math.pow(0.98, inputs.timeHorizon))).toFixed(0)}% chance of occurring at least once over your ${inputs.timeHorizon}-year horizon` },
                     { label: 'Crash Severity', value: '20\u201340% drop', note: 'Suddenly slashes the value of stocks for that specific year on top of normal market swings' },
                     { label: 'Safety Guardrail (Guyton-Klinger)', value: 'Overspending \u2192 \u221210%', note: 'Cuts spending by 10% if your withdrawal rate rises above 120% of the starting rate (capped at max 15% cumulative reduction)' },
                     { label: 'Prosperity Guardrail (Guyton-Klinger)', value: 'Excess growth \u2192 +10%', note: 'Raises spending by 10% if your withdrawal rate falls below 80% of the starting rate (capped at max 25% cumulative raise)' },
