@@ -13,10 +13,11 @@ interface CustomTooltipProps {
   }>;
   label?: string | number;
   startYear: number;
+  currentAge: number;
 }
 
 // Typed tooltip props
-const CustomTooltip = ({ active, payload, label, startYear }: CustomTooltipProps) => {
+const CustomTooltip = ({ active, payload, label, startYear, currentAge }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     const yearNum = typeof label === 'number' ? label : parseInt(String(label));
     const yearsAway = yearNum - startYear;
@@ -25,10 +26,11 @@ const CustomTooltip = ({ active, payload, label, startYear }: CustomTooltipProps
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-xl min-w-[200px]">
         <div className="border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Forecast Year</p>
-          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+          <div className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
             {label}
-            {yearsAway > 0 && <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal ml-1">({yearsAway} years away)</span>}
-          </p>
+            {yearsAway > 0 && <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">({yearsAway} years away)</div>}
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">Age {currentAge + yearsAway}</div>
+          </div>
         </div>
         <div className="space-y-1">
           {payload.map((entry, index) => (
@@ -406,9 +408,10 @@ ${auditSample}
 
       console.log(`Exporting ${dataToExport.length} rows`);
 
-      const headers = ['Year', 'Average Market', 'Below Average', 'Downturn'];
+      const headers = ['Year', 'Age', 'Average Market', 'Below Average', 'Downturn'];
       const rows = dataToExport.map(d => [
         d.year,
+        inputs.currentAge + (d.year - startYear),
         d.average != null ? d.average.toFixed(2) : '0.00',
         d.belowAverage != null ? d.belowAverage.toFixed(2) : '0.00',
         d.downturn != null ? d.downturn.toFixed(2) : '0.00'
@@ -869,7 +872,7 @@ ${auditSample}
                       tickFormatter={formatCurrency}
                       dx={-10}
                     />
-                    <Tooltip content={<CustomTooltip startYear={startYear} />} cursor={{ stroke: isDarkMode ? '#334155' : '#cbd5e1', strokeWidth: 1, strokeDasharray: '5 5' }} />
+                    <Tooltip content={<CustomTooltip startYear={startYear} currentAge={inputs.currentAge} />} cursor={{ stroke: isDarkMode ? '#334155' : '#cbd5e1', strokeWidth: 1, strokeDasharray: '5 5' }} />
                     <Area
                       type="monotone"
                       dataKey="average"
@@ -1072,7 +1075,7 @@ ${auditSample}
                     // NORMAL TABLE HEADERS
                     <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider transition-colors">
                       <tr>
-                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 sticky top-0 z-20 shadow-sm transition-colors">Year</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 sticky top-0 z-20 shadow-sm transition-colors">Year / Age</th>
                         <th className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 text-growth-green dark:text-green-500 sticky top-0 z-20 shadow-sm transition-colors">
                           Average Market
                           <div className="text-[9px] font-normal normal-case tracking-normal mt-0.5 opacity-70">P{inputs.percentileAverage} of 100k runs</div>
@@ -1221,9 +1224,16 @@ ${auditSample}
                       // NORMAL TABLE ROWS
                       visibleData.map((row) => (
                         <tr key={row.year} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300 transition-colors">
+                          <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300 transition-colors leading-tight">
                             {row.year}
-                            {row.year - startYear > 0 && <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal ml-1">({row.year - startYear} years away)</span>}
+                            {row.year - startYear > 0 && (
+                              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">
+                                ({row.year - startYear} years away)
+                              </div>
+                            )}
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">
+                              Age {inputs.currentAge + (row.year - startYear)}
+                            </div>
                           </td>
                           <td className={`px-6 py-4 font-medium ${row.average === null ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-400'} transition-colors`}>
                             {row.average !== null ? `$${row.average.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Depleted'}
