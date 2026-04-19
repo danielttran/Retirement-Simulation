@@ -279,13 +279,15 @@ interface SimState {
   bond: number;
   cash: number;
   spend: number;
-  /** Accumulated Guyton-Klinger spend-adjustment factor (starts at 1.0, updated permanently). */
+  /** Guyton-Klinger spend-adjustment factor. Applies for exactly one year, then resets to 1.0. */
   spendMultiplier: number;
   /** Initial Withdrawal Rate — set in year 0 as the baseline for G-K guardrail comparisons. */
   iwr: number;
   /** True if a G-K guardrail fired in the immediately preceding year.
    *  Enforces the standard 1-year cooldown: no back-to-back adjustments. */
   gkFiredLastYear: boolean;
+  /** Tracks when the last adjustment occurred to force a 1.0 reset the following year. */
+  gkAdjustmentYear: number | null;
 }
 
 interface YearOutcome {
@@ -478,6 +480,7 @@ const simulateYear = (
       spendMultiplier: state.spendMultiplier,
       iwr: state.iwr,
       gkFiredLastYear: state.gkFiredLastYear,
+      gkAdjustmentYear: state.gkAdjustmentYear,
     },
     withdrawal: actualWithdrawal,
     fees,
@@ -509,6 +512,7 @@ const generateAuditLog = (
     spendMultiplier: 1.0,
     iwr: 0,
     gkFiredLastYear: false,
+    gkAdjustmentYear: null,
   };
 
   // capture the one-time setup friction so Year 1 of the audit log can
@@ -613,6 +617,12 @@ const generateAuditLog = (
     // historical adjustments penalizes the new planned budget.
     if (isPhaseTransition) {
       state.spendMultiplier = 1.0;
+      state.gkAdjustmentYear = null;
+    }
+
+    // After exactly 1 year of adjustment, force multiplier back to 1.0
+    if (state.gkAdjustmentYear !== null && year - state.gkAdjustmentYear === 1) {
+      state.spendMultiplier = 1.0;
     }
 
     const taxRate = inputs.withdrawalTaxRate / 100;
@@ -674,6 +684,12 @@ const generateAuditLog = (
       // Year 1 or new spending phase: establish / re-establish the G-K baseline.
       state.iwr = currentWR;
       state.gkFiredLastYear = false;
+      state.gkAdjustmentYear = null;
+    } else if (state.gkAdjustmentYear !== null && year - state.gkAdjustmentYear === 1) {
+      // Adjustment year ended: re-baseline IWR and enforce 1-year cooldown
+      state.iwr = currentWR;
+      state.gkFiredLastYear = false;
+      gkEvent = 'Guardrail Reset: Adjustment period ended. Spending and baseline reset to normal.';
     } else if (state.iwr > 0.0001) {
       // Per the original G-K paper (Guyton 2004 / Klinger 2006), Safety fires only when the
       // prior year's portfolio return was negative, and Prosperity only when it was positive.
@@ -698,6 +714,7 @@ const generateAuditLog = (
           ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
           : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
         state.gkFiredLastYear = true;
+        state.gkAdjustmentYear = year;
       } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
         // Prosperity: portfolio very healthy — allow a spending raise.
         // guard currentWR > 0 so a depleted portfolio (CWR = 0) cannot
@@ -713,6 +730,7 @@ const generateAuditLog = (
           ? 'Prosperity Guardrail (ceiling): Spending raise reached the 25% maximum increase — no further raises will be applied.'
           : 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
         state.gkFiredLastYear = true;
+        state.gkAdjustmentYear = year;
       } else {
         state.gkFiredLastYear = false;
       }
@@ -833,6 +851,7 @@ export const runSimulation = (
       spendMultiplier: 1.0,
       iwr: 0,
       gkFiredLastYear: false,
+      gkAdjustmentYear: null,
     };
 
     if (strategy === 'BUCKET') {
@@ -908,6 +927,12 @@ export const runSimulation = (
       // Reset the Guyton-Klinger penalty/bonus during Phase Transitions.
       if (isPhaseTransition) {
         state.spendMultiplier = 1.0;
+        state.gkAdjustmentYear = null;
+      }
+
+      // After exactly 1 year of adjustment, force multiplier back to 1.0
+      if (state.gkAdjustmentYear !== null && year - state.gkAdjustmentYear === 1) {
+        state.spendMultiplier = 1.0;
       }
 
       // Blended effective tax rate: only the fraction held in tax-deferred accounts
@@ -953,6 +978,11 @@ export const runSimulation = (
       if (year === 0 || isPhaseTransition) {
         state.iwr = currentWR;
         state.gkFiredLastYear = false;
+        state.gkAdjustmentYear = null;
+      } else if (state.gkAdjustmentYear !== null && year - state.gkAdjustmentYear === 1) {
+        // Adjustment year ended: re-baseline IWR and enforce 1-year cooldown
+        state.iwr = currentWR;
+        state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
         if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
           const newMult = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
@@ -967,6 +997,7 @@ export const runSimulation = (
             ? state.spend * taxRate
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
+          state.gkAdjustmentYear = year;
         } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
           // currentWR > 0 prevents a depleted portfolio from triggering
           // an endless loop of 10% raises (CWR = 0 always satisfies < 0.80 × IWR).
@@ -978,6 +1009,7 @@ export const runSimulation = (
             ? rmdThisYear * taxRate + Math.max(0, state.spend - rmdThisYear) * effTaxRate
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
+          state.gkAdjustmentYear = year;
         } else {
           state.gkFiredLastYear = false;
         }

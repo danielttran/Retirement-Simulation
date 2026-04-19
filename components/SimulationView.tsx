@@ -779,7 +779,7 @@ ${auditSample}
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0">GK Multiplier &times;X.XXX</span>
-                      <span>Spending Changes Over Time: Shows how much your original spending has been cut or raised long-term by the Safety/Bonus rules.</span>
+                      <span>1-Year Spending Adjustments: Shows the 10% spending cut or raise applied to this specific year by the Safety/Bonus rules before resetting to 1.0x.</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-purple-500 dark:text-purple-400 whitespace-nowrap shrink-0">Infl: X.X% (purple)</span>
@@ -1050,8 +1050,8 @@ ${auditSample}
                     { label: 'Market Relationships', value: '\u22120.30 Correlation', note: 'When stocks have a bad year, inflation tends to be slightly lower (e.g., during recessions). The simulation models this with a \u22120.30 correlation between stock returns and inflation draws.' },
                     { label: 'Market Crash Probability', value: '2% / year', note: `A black-swan event; about ${(100 * (1 - Math.pow(0.98, inputs.timeHorizon))).toFixed(0)}% chance of occurring at least once over your ${inputs.timeHorizon}-year horizon` },
                     { label: 'Crash Severity', value: '20\u201340% drop', note: 'Suddenly slashes the value of stocks for that specific year on top of normal market swings' },
-                    { label: 'Safety Guardrail (Guyton-Klinger)', value: 'Overspending \u2192 \u221210%', note: 'Cuts spending by 10% if your withdrawal rate rises above 120% of the starting rate (capped at max 15% cumulative reduction)' },
-                    { label: 'Prosperity Guardrail (Guyton-Klinger)', value: 'Excess growth \u2192 +10%', note: 'Raises spending by 10% if your withdrawal rate falls below 80% of the starting rate (capped at max 25% cumulative raise)' },
+                    { label: 'Safety Guardrail (Guyton-Klinger)', value: 'Overspending \u2192 \u221210%', note: 'Cuts spending by 10% for exactly one year if your withdrawal rate rises above 120% of the starting rate' },
+                    { label: 'Prosperity Guardrail (Guyton-Klinger)', value: 'Excess growth \u2192 +10%', note: 'Raises spending by 10% for exactly one year if your withdrawal rate falls below 80% of the starting rate' },
                     { label: 'Rebalancing Limit', value: '\u00b15% of target mix', note: 'We only force a costly trade if your mix wanders too far off target' },
                     { label: 'Fees & Costs', value: `${inputs.managementFee}% Mgt + 0.05% Trade`, note: `Your ${inputs.managementFee}% yearly management fee plus 0.05% friction cost applied whenever selling or buying` },
                     { label: 'Required Distribution (RMD)', value: 'IRS Uniform Lifetime', note: 'Follows SECURE 2.0 / IRS Pub.\u00a0590-B: age 72 (born \u22641950), age 73 (born 1951\u20131959), age 75 (born \u22651960). The simulation uses your Birth Year to set the exact threshold.' },
