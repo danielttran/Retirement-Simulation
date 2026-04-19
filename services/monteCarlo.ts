@@ -101,6 +101,56 @@ function computeFirstYearGrossedUpSpend(
   return rmdAmount > grossBaseSpend ? rmdAmount : grossBaseSpend;
 }
 
+/**
+ * Computes the day-0 portfolio state after strategy setup trades and friction.
+ * Shared by runSimulation and generateAuditLog to keep initialization math identical.
+ */
+function initializeStartingState(
+  inputs: SimulationInputs,
+  strategy: StrategyType,
+  targetStockWeight: number,
+  targetBondWeight: number,
+  initialSpend: number
+): { state: SimState; initialSetupCost: number } {
+  const { initialCash, initialInvestments } = inputs;
+  const totalStartPortfolio = initialCash + initialInvestments;
+  const state: SimState = {
+    stock: 0, bond: 0, cash: 0, spend: initialSpend,
+    spendMultiplier: 1.0,
+    iwr: 0,
+    gkFiredLastYear: false,
+    gkAdjustmentYear: null,
+  };
+  let initialSetupCost = 0;
+
+  if (strategy === 'BUCKET') {
+    const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
+    const targetCashBuffer = Math.min(2 * Math.max(grossedUpInitialSpend, 0), totalStartPortfolio * 0.50);
+    if (initialCash >= targetCashBuffer) {
+      state.cash = targetCashBuffer;
+      state.stock = totalStartPortfolio - targetCashBuffer;
+    } else {
+      const cashNeeded = targetCashBuffer - initialCash;
+      const grossSellNeeded = cashNeeded / (1 - TRANSACTION_COST);
+      const grossSell = Math.min(grossSellNeeded, initialInvestments);
+      state.cash = initialCash + grossSell * (1 - TRANSACTION_COST);
+      state.stock = initialInvestments - grossSell;
+    }
+    state.bond = 0;
+  } else {
+    const targetStockAmt = totalStartPortfolio * targetStockWeight;
+    const targetBondAmt = totalStartPortfolio * targetBondWeight;
+    const tradeVolume = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
+    initialSetupCost = tradeVolume * TRANSACTION_COST;
+    const effectiveTotal = totalStartPortfolio - initialSetupCost;
+    state.stock = effectiveTotal * targetStockWeight;
+    state.bond = effectiveTotal * targetBondWeight;
+    state.cash = 0;
+  }
+
+  return { state, initialSetupCost };
+}
+
 // Nominal Return Assumptions (Long-term historical averages)
 const NOMINAL_ASSUMPTIONS = {
   STOCK: { mean: 0.085, stdDev: 0.17 }, // ~8.5% Nominal, 17% Vol
@@ -507,58 +557,12 @@ const generateAuditLog = (
   else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
 
   const initialSpend = getSpendingForYear(0, spendingPhases);
-  let state: SimState = {
-    stock: 0, bond: 0, cash: 0, spend: initialSpend,
-    spendMultiplier: 1.0,
-    iwr: 0,
-    gkFiredLastYear: false,
-    gkAdjustmentYear: null,
-  };
-
+  const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, initialSpend);
+  let state = initialized.state;
   // capture the one-time setup friction so Year 1 of the audit log can
   // surface it as an explicit fee. Without this, the starting balance appears lower
   // than the user's input with no corresponding fees entry — "vanishing money".
-  let initialSetupCost = 0;
-
-  if (strategy === 'BUCKET') {
-    // Mirror of runSimulation initial state — use grossed-up spend so the
-    // initial cash buffer matches what simulateYear targets in year 1.
-    const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
-    const targetCashBuffer = Math.min(2 * Math.max(grossedUpInitialSpend, 0), totalStartPortfolio * 0.50);
-    if (initialCash >= targetCashBuffer) {
-      state.cash = targetCashBuffer;
-      state.stock = totalStartPortfolio - targetCashBuffer;
-    } else {
-      const cashNeeded = targetCashBuffer - initialCash;
-      const grossSellNeeded = cashNeeded / (1 - TRANSACTION_COST);
-      const grossSell = Math.min(grossSellNeeded, initialInvestments);
-      state.cash = initialCash + grossSell * (1 - TRANSACTION_COST);
-      state.stock = initialInvestments - grossSell;
-    }
-    state.bond = 0;
-  } else {
-    // Initialization cost: charge friction on the full round-trip trade volume.
-    // Starting state: initialCash (cash) + initialInvestments (stocks, assumed).
-    // Target state:   targetStockWeight × total  (stocks)
-    //                 targetBondWeight  × total  (bonds, bought from zero)
-    //                 0                          (cash all deployed)
-    //
-    // Trade volume = |stock delta| + |bond delta|
-    //   = |initialInvestments − targetStockAmt| + targetBondAmt
-    //
-    // Previously only the sell side (max-zero stock delta) was charged, so users
-    // who started with all cash and needed to buy both stocks and bonds paid $0
-    // in friction. Now both buying and selling are priced correctly.
-    const targetStockAmt = totalStartPortfolio * targetStockWeight;
-    const targetBondAmt = totalStartPortfolio * targetBondWeight;
-    const tradeVolume = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
-    const setupCost = tradeVolume * TRANSACTION_COST;
-    initialSetupCost = setupCost;
-    const effectiveTotal = totalStartPortfolio - setupCost;
-    state.stock = effectiveTotal * targetStockWeight;
-    state.bond = effectiveTotal * targetBondWeight;
-    state.cash = 0;
-  }
+  const initialSetupCost = initialized.initialSetupCost;
 
   // Tracks the product of (1 + realised_inflation) across all years for precise
   // nominal-dollar reporting.  Using the actual stochastic draws (stored in the
@@ -840,57 +844,20 @@ export const runSimulation = (
   const trajectoryColumns: Float64Array[] = Array(timeHorizon).fill(0).map(() => new Float64Array(NUM_SIMULATIONS));
 
   let failures = 0;
-  // Comfortable Survival: count runs where the FINAL balance is below 25% of the starting
-  // portfolio in real terms. This is distinct from binary survival (never hit $0) and shows
-  // how many plans ended with meaningful reserves vs just barely surviving.
+  // Comfortable Survival: count runs where the FINAL balance is below 25% of the
+  // strategy-adjusted starting portfolio (post day-0 setup costs) in real terms.
+  // This keeps cross-strategy comparisons fair when setup friction differs.
   let comfortableFailures = 0;
   let totalAnnualizedVol = 0;
 
   const initialSpend = getSpendingForYear(0, spendingPhases);
+  const initializedForThreshold = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, initialSpend);
+  const startAfterSetup = initializedForThreshold.state.stock + initializedForThreshold.state.bond + initializedForThreshold.state.cash;
+  const comfortThreshold = startAfterSetup * 0.25;
 
   for (let sim = 0; sim < NUM_SIMULATIONS; sim++) {
-    // Initial State
-    let state: SimState = {
-      stock: 0, bond: 0, cash: 0, spend: initialSpend,
-      spendMultiplier: 1.0,
-      iwr: 0,
-      gkFiredLastYear: false,
-      gkAdjustmentYear: null,
-    };
-
-    if (strategy === 'BUCKET') {
-      // The cash buffer must cover 2 × grossed-up spend so it matches exactly
-      // what simulateYear targets in year 1 (after tax and SS adjustments).
-      // Using raw spend here would leave the buffer short by the tax gross-up
-      // amount, triggering spurious stock sells in the first simulation year.
-      const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
-      const targetCashBuffer = Math.min(2 * Math.max(grossedUpInitialSpend, 0), totalStartPortfolio * 0.50);
-      if (initialCash >= targetCashBuffer) {
-        // Already have enough cash; invest the surplus into stocks (buying — no cost).
-        state.cash = targetCashBuffer;
-        state.stock = totalStartPortfolio - targetCashBuffer;
-      } else {
-        // Sell investments to top up the cash bucket; gross-up so net cash == cashNeeded.
-        const cashNeeded = targetCashBuffer - initialCash;
-        const grossSellNeeded = cashNeeded / (1 - TRANSACTION_COST);
-        const grossSell = Math.min(grossSellNeeded, initialInvestments);
-        state.cash = initialCash + grossSell * (1 - TRANSACTION_COST);
-        state.stock = initialInvestments - grossSell;
-      }
-      state.bond = 0;
-    } else {
-      // Initialization cost: symmetric round-trip friction on both buy and sell legs.
-      // Trade volume = |stock delta| + bond delta (bonds always bought from zero).
-      // Mirrors the identical fix in generateAuditLog — see that block for full derivation.
-      const targetStockAmt = totalStartPortfolio * targetStockWeight;
-      const targetBondAmt = totalStartPortfolio * targetBondWeight;
-      const tradeVolume = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
-      const setupCost = tradeVolume * TRANSACTION_COST;
-      const effectiveTotal = totalStartPortfolio - setupCost;
-      state.stock = effectiveTotal * targetStockWeight;
-      state.bond = effectiveTotal * targetBondWeight;
-      state.cash = 0;
-    }
+    const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, initialSpend);
+    let state = initialized.state;
 
     const currentRunReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[] = [];
     // Store local trajectory for this run in a typed array
@@ -1053,12 +1020,10 @@ export const runSimulation = (
     if (droppedToZero) failures++;
 
     // Comfortable Survival Rate: failure if the FINAL real balance is below 25% of the
-    // starting portfolio. Captures plans that technically survived but ended dangerously low.
-    // Note: terminalSuccessRate (end-of-period only check) was removed because once the
-    // portfolio clamps to $0 in simulateYear it NEVER recovers — making any-point and
-    // end-of-period checks produce identical numbers (< 0.1% divergence in practice).
+    // strategy-adjusted starting portfolio. Captures plans that technically survived
+    // but ended dangerously low.
     const finalValSafe = Math.max(0, finalVal);
-    const belowComfortThreshold = finalValSafe < totalStartPortfolio * 0.25;
+    const belowComfortThreshold = finalValSafe < comfortThreshold;
     if (belowComfortThreshold) comfortableFailures++;
 
     let variance = 0;
@@ -1194,15 +1159,13 @@ export const runSimulation = (
     auditLogAverage,
     auditLogBelowAverage,
     auditLogDownturn,
-    // Zero-Touch / Plan Survival Rate: never touched $0 at any point in the horizon.
-    // This IS effectively the Bengen/FIRECalc definition for this model because once the
-    // portfolio clamps to $0 in simulateYear it cannot recover — making end-of-period and
-    // any-point checks produce identical results (< 0.1% divergence).
+    // Zero-Touch / Plan Survival Rate: never touched $1 or below at any point in the horizon.
     successRate: ((NUM_SIMULATIONS - failures) / NUM_SIMULATIONS) * 100,
-    // Comfortable Survival Rate: ends with ≥ 25% of starting real portfolio value.
+    // Comfortable Survival Rate: ends with ≥ 25% of post-setup starting real portfolio value.
     // Meaningfully different from successRate — separates "survived but depleted" from
     // "plan worked well with meaningful reserves remaining."
     terminalSuccessRate: ((NUM_SIMULATIONS - comfortableFailures) / NUM_SIMULATIONS) * 100,
+    comfortFloorValue: comfortThreshold,
     finalMedianValue: finalMedian,
     volatility: avgVol,
     allocation: { stock: dispStock, bond: dispBond, cash: dispCash },
