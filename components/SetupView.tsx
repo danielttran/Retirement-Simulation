@@ -609,7 +609,7 @@ const SetupView: React.FC<SetupViewProps> = ({
               {/* Retirement Age */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
-                  Retirement Starting Age
+                  Your Current Age (Simulation Starts Now)
                 </label>
                 <div className="flex items-center gap-4">
                   <input
@@ -629,7 +629,7 @@ const SetupView: React.FC<SetupViewProps> = ({
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-200 w-16 text-right transition-colors">{formState.currentAge} yrs</span>
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
-                  Your age at the start of retirement. RMDs begin at age 72 (born &le;1950), 73 (born 1951&ndash;1959), or 75 (born &ge;1960) per SECURE 2.0 / IRS Pub. 590-B &mdash; calculated automatically from your Birth Year.
+                  Your current age. The simulation projects forward from today. RMDs begin at age 72 (born &le;1950), 73 (born 1951&ndash;1959), or 75 (born &ge;1960) per SECURE 2.0 / IRS Pub. 590-B &mdash; calculated automatically from your Birth Year.
                 </p>
               </div>
 

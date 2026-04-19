@@ -102,6 +102,7 @@ const App: React.FC = () => {
   // any in-flight run is implicitly superseded when the user triggers a new one
   // (the prior result is discarded when the new message arrives).
   const workerRef = useRef<Worker | null>(null);
+  const runningIdRef = useRef<number>(0);
   const getWorker = useCallback((): Worker => {
     if (!workerRef.current) {
       // Vite module-worker syntax: the bundler co-locates the worker chunk and
@@ -121,18 +122,14 @@ const App: React.FC = () => {
     setIsSimulating(true);
     setSimulationError(null);
 
-    // Terminate any in-flight worker so a stale slow run cannot overwrite the
-    // result of a newer run that completes first.  Termination is instant; the
-    // next getWorker() call creates a fresh instance.
-    if (workerRef.current) {
-      workerRef.current.terminate();
-      workerRef.current = null;
-    }
+    runningIdRef.current += 1;
+    const currentRunId = runningIdRef.current;
 
     const worker = getWorker();
 
     // Replace the message handler for this invocation (handles superseded runs).
     worker.onmessage = (e: MessageEvent) => {
+      if (currentRunId !== runningIdRef.current) return;
       const { type } = e.data;
       if (type === 'result') {
         setResults(e.data.result);
@@ -147,6 +144,7 @@ const App: React.FC = () => {
     };
 
     worker.onerror = (err) => {
+      if (currentRunId !== runningIdRef.current) return;
       console.error('Simulation worker uncaught error:', err);
       setSimulationError(err.message ?? 'Unexpected simulation error.');
       setIsSimulating(false);

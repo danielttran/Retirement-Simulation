@@ -405,7 +405,9 @@ const simulateYear = (
         actionLog = `Market up ${(returns.stock * 100).toFixed(1)}%.`;
         if (refillAmount > 0) {
           const refillLabel = refillIncludesPrincipal ? 'stocks' : 'stock gains';
-          actionLog += ` Sold ${refillLabel} to refill cash by $${Math.round(refillAmount / 1000)}k (buffer capped at 50% of portfolio).`;
+          const wasCapped = targetBuffer === totalCurrentPortfolio * 0.50;
+          const capText = wasCapped ? ' (buffer capped at 50% of portfolio)' : '';
+          actionLog += ` Sold ${refillLabel} to refill cash by $${Math.round(refillAmount / 1000)}k${capText}.`;
         } else {
           actionLog += ` Cash buffer already full; no selling needed.`;
         }
@@ -518,7 +520,7 @@ const generateAuditLog = (
     // Mirror of runSimulation initial state — use grossed-up spend so the
     // initial cash buffer matches what simulateYear targets in year 1.
     const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
-    const targetCashBuffer = 2 * Math.max(grossedUpInitialSpend, 0);
+    const targetCashBuffer = Math.min(2 * Math.max(grossedUpInitialSpend, 0), totalStartPortfolio * 0.50);
     if (initialCash >= targetCashBuffer) {
       state.cash = targetCashBuffer;
       state.stock = totalStartPortfolio - targetCashBuffer;
@@ -705,7 +707,7 @@ const generateAuditLog = (
         state.spendMultiplier = newMult;
         state.spend *= factor;
         taxOwed = rmdAmount > grossBaseSpend
-          ? state.spend * taxRate
+          ? rmdAmount * taxRate + Math.max(0, state.spend - rmdAmount) * effTaxRate
           : state.spend - Math.max(0, baseSpend * factor);
         gkEvent = newMult === GK_CEILING
           ? 'Prosperity Guardrail (ceiling): Spending raise reached the 25% maximum increase — no further raises will be applied.'
@@ -839,7 +841,7 @@ export const runSimulation = (
       // Using raw spend here would leave the buffer short by the tax gross-up
       // amount, triggering spurious stock sells in the first simulation year.
       const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(initialSpend, totalStartPortfolio, inputs);
-      const targetCashBuffer = 2 * Math.max(grossedUpInitialSpend, 0);
+      const targetCashBuffer = Math.min(2 * Math.max(grossedUpInitialSpend, 0), totalStartPortfolio * 0.50);
       if (initialCash >= targetCashBuffer) {
         // Already have enough cash; invest the surplus into stocks (buying — no cost).
         state.cash = targetCashBuffer;
@@ -973,7 +975,7 @@ export const runSimulation = (
           state.spendMultiplier = newMult;
           state.spend *= factor;
           taxOwed = rmdThisYear > grossBaseSpend
-            ? state.spend * taxRate
+            ? rmdThisYear * taxRate + Math.max(0, state.spend - rmdThisYear) * effTaxRate
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
         } else {
@@ -1134,7 +1136,7 @@ export const runSimulation = (
     // the displayed allocation exactly matches what the engine sets up on day one.
     const rawInitialSpend = getSpendingForYear(0, spendingPhases);
     const grossedUpInitialSpend = computeFirstYearGrossedUpSpend(rawInitialSpend, totalStartPortfolio, inputs);
-    const startCash = Math.min(totalStartPortfolio, 2 * Math.max(grossedUpInitialSpend, 0));
+    const startCash = Math.min(totalStartPortfolio * 0.50, 2 * Math.max(grossedUpInitialSpend, 0));
     dispCash = startCash / totalStartPortfolio;
     dispStock = 1.0 - dispCash;
     dispBond = 0;
