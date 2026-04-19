@@ -621,11 +621,9 @@ const SetupView: React.FC<SetupViewProps> = ({
                     value={formState.currentAge}
                     onChange={(e) => {
                       const newAge = parseInt(e.target.value);
-                      const currentYear = new Date().getFullYear();
                       setFormState(prev => ({
                         ...prev,
-                        currentAge: newAge,
-                        birthYear: currentYear - newAge
+                        currentAge: newAge
                       }));
                     }}
                   />
