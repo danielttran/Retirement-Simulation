@@ -126,8 +126,7 @@ Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawd
 Guyton-Klinger Guardrails:
   • Safety Rule: If CWR (Current Withdrawal Rate) > 120% of IWR (Initial Withdrawal Rate) AND the prior year's total portfolio return was negative → spending cut by 10%
   • Prosperity Rule: If CWR (Current Withdrawal Rate) < 80% of IWR (Initial Withdrawal Rate) AND the prior year's total portfolio return was positive → spending raised by 10%
-  • 1-year cooldown: No back-to-back guardrail adjustments (prevents every-other-year spiral)
-  • Cumulative bounds: spending multiplier clamped to [0.85, 1.25] (max 15% cut / 25% raise from phase baseline)
+  • Temporary Adjustments: Guardrail cuts/raises last exactly 1 year before resetting to baseline to prevent multi-year compounding spirals.
   • IWR baseline resets at spending phase transitions and when Social Security income first activates
 Bucket Strategy: Cash buffer sized at 2× grossed-up annual spend (including tax gross-up, not raw spend); buffer capped at 50% of portfolio to protect growth engine
 Drift-Band Rebalancing: ±5% absolute equity ratio band; proportional sell within band, full rebalance outside
@@ -139,7 +138,7 @@ Scenario Bands: P${inputs.percentileAverage} (green), P${inputs.percentileBelowA
 
 --- SIMULATION RESULTS ---
 Plan Success Rate (Zero-Touch): ${results.successRate.toFixed(1)}% — portfolio NEVER touched $1 or below at any point during the ${inputs.timeHorizon}-year horizon.
-Comfortable Survival Rate: ${results.terminalSuccessRate.toFixed(1)}% — portfolio ended with ≥ 25% of the strategy-adjusted starting balance ($${Math.round(results.comfortFloorValue).toLocaleString()} comfort floor). Lower than Plan Success Rate because some plans that technically survived still ended nearly depleted.
+Comfortable Survival Rate: ${results.comfortableSurvivalRate.toFixed(1)}% — portfolio ended with ≥ 25% of the strategy-adjusted starting balance ($${Math.round(results.comfortFloorValue).toLocaleString()} comfort floor). Lower than Plan Success Rate because some plans that technically survived still ended nearly depleted.
 P${inputs.percentileAverage} Representative Final Value (real today's $): $${results.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
 Annualised Portfolio Volatility: ${results.volatility.toFixed(1)}%
 
@@ -343,7 +342,7 @@ ${auditSample}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[9px] text-slate-300 dark:text-slate-600 font-semibold uppercase tracking-wider">Comfortable</span>
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{results.terminalSuccessRate.toFixed(1)}%</span>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{results.comfortableSurvivalRate.toFixed(1)}%</span>
                 </div>
               </div>
             </div>
@@ -1028,8 +1027,8 @@ ${auditSample}
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Comfortable Survival</span>
-                    <span className={`text-sm font-bold ${results.terminalSuccessRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.terminalSuccessRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
-                      {results.terminalSuccessRate.toFixed(1)}%
+                    <span className={`text-sm font-bold ${results.comfortableSurvivalRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : results.comfortableSurvivalRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                      {results.comfortableSurvivalRate.toFixed(1)}%
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 leading-tight">

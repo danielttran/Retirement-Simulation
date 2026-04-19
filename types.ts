@@ -80,7 +80,7 @@ export interface SimulationResult {
   /** Zero-Touch Rate: % of runs where the portfolio NEVER touched $1 or below at any point during the horizon. */
   successRate: number;
   /** Comfortable Survival Rate: % of runs where the portfolio ended with ≥ 25% of the strategy-adjusted starting real portfolio value. Lower than successRate — separates "survived but depleted" from "ended with meaningful reserves". */
-  terminalSuccessRate: number;
+  comfortableSurvivalRate: number;
   /** Strategy-adjusted comfort floor used for terminalSuccessRate (25% of post-setup starting balance, real dollars). */
   comfortFloorValue: number;
   finalMedianValue: number;

@@ -18,14 +18,9 @@ export function getSpendingForYear(year: number, phases: SpendingPhase[]): numbe
 
 const TRANSACTION_COST = 0.0005; // 0.05% friction on selling/rebalancing
 
-// Guyton-Klinger guardrail bounds.
-// The multiplier tracks accumulated G-K adjustments and is clamped to [GK_FLOOR, GK_CEILING].
-// Without a floor, consecutive safety fires (every other year) compound to a 65%+ spending
-// reduction over 20 years — far beyond what G-K was ever intended to produce.
-// 0.85 floor = spending can never drop more than 15% below the phase target.
-// 1.25 ceiling = spending can never rise more than 25% above the phase target.
-const GK_FLOOR = 0.85;
-const GK_CEILING = 1.25;
+// Guyton-Klinger guardrail adjustments are strictly temporary (lasting 1 year).
+// Therefore, the multiplier only ever reaches 0.90 (Safety) or 1.10 (Prosperity)
+// and never compounds, negating the need for historical floors/ceilings.
 
 // ---------------------------------------------------------------------------
 // RMD — IRS Uniform Lifetime Table (Publication 590-B, SECURE 2.0 / 2022+)
@@ -135,6 +130,7 @@ function initializeStartingState(
       const grossSell = Math.min(grossSellNeeded, initialInvestments);
       state.cash = initialCash + grossSell * (1 - TRANSACTION_COST);
       state.stock = initialInvestments - grossSell;
+      initialSetupCost = grossSell * TRANSACTION_COST;
     }
     state.bond = 0;
   } else {
@@ -697,10 +693,10 @@ const generateAuditLog = (
     } else if (state.iwr > 0.0001) {
       // Per the original G-K paper (Guyton 2004 / Klinger 2006), Safety fires only when the
       // prior year's portfolio return was negative, and Prosperity only when it was positive.
-      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
+      if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && prevYearPortfolioReturn < 0) {
         // Safety: portfolio shrinking faster than sustainable — cut spending.
-        const newMult = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
-        const factor = newMult / state.spendMultiplier; // ≤ 0.90; may be larger if hitting floor
+        const newMult = state.spendMultiplier * 0.90;
+        const factor = newMult / state.spendMultiplier; // 0.90
         state.spendMultiplier = newMult;
         state.spend *= factor;
         // the GK 10% cut must never push spending below the IRS RMD floor.
@@ -714,25 +710,21 @@ const generateAuditLog = (
         taxOwed = state.spend <= rmdAmount + 1
           ? state.spend * taxRate
           : state.spend - Math.max(0, baseSpend * factor);
-        gkEvent = newMult === GK_FLOOR
-          ? 'Safety Guardrail (floor): Spending cut reached the 15% maximum reduction — no further cuts will be applied.'
-          : 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate — portfolio shrinking faster than expected. Spending cut by 10%.';
+        gkEvent = 'Safety Guardrail: Gross portfolio withdrawal rate exceeded 120% of your starting rate. Spending temporarily cut by 10%.';
         state.gkFiredLastYear = true;
         state.gkAdjustmentYear = year;
-      } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
+      } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && prevYearPortfolioReturn > 0) {
         // Prosperity: portfolio very healthy — allow a spending raise.
         // guard currentWR > 0 so a depleted portfolio (CWR = 0) cannot
         // trigger an endless chain of 10% raises on non-existent money.
-        const newMult = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
+        const newMult = state.spendMultiplier * 1.10;
         const factor = newMult / state.spendMultiplier;
         state.spendMultiplier = newMult;
         state.spend *= factor;
         taxOwed = rmdAmount > grossBaseSpend
           ? rmdAmount * taxRate + Math.max(0, state.spend - rmdAmount) * effTaxRate
           : state.spend - Math.max(0, baseSpend * factor);
-        gkEvent = newMult === GK_CEILING
-          ? 'Prosperity Guardrail (ceiling): Spending raise reached the 25% maximum increase — no further raises will be applied.'
-          : 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate — portfolio is very healthy. Spending raised by 10%.';
+        gkEvent = 'Prosperity Guardrail: Gross portfolio withdrawal rate dropped below 80% of your starting rate. Spending temporarily raised by 10%.';
         state.gkFiredLastYear = true;
         state.gkAdjustmentYear = year;
       } else {
@@ -955,8 +947,8 @@ export const runSimulation = (
         state.iwr = currentWR;
         state.gkFiredLastYear = false;
       } else if (state.iwr > 0.0001) {
-        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && state.spendMultiplier > GK_FLOOR && prevYearPortfolioReturn < 0) {
-          const newMult = Math.max(state.spendMultiplier * 0.90, GK_FLOOR);
+        if (!state.gkFiredLastYear && currentWR > state.iwr * 1.20 && prevYearPortfolioReturn < 0) {
+          const newMult = state.spendMultiplier * 0.90;
           const factor = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend *= factor;
@@ -969,10 +961,10 @@ export const runSimulation = (
             : state.spend - Math.max(0, baseSpend * factor);
           state.gkFiredLastYear = true;
           state.gkAdjustmentYear = year;
-        } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && state.spendMultiplier < GK_CEILING && prevYearPortfolioReturn > 0) {
+        } else if (!state.gkFiredLastYear && currentWR > 0 && currentWR < state.iwr * 0.80 && prevYearPortfolioReturn > 0) {
           // currentWR > 0 prevents a depleted portfolio from triggering
           // an endless loop of 10% raises (CWR = 0 always satisfies < 0.80 × IWR).
-          const newMult = Math.min(state.spendMultiplier * 1.10, GK_CEILING);
+          const newMult = state.spendMultiplier * 1.10;
           const factor = newMult / state.spendMultiplier;
           state.spendMultiplier = newMult;
           state.spend *= factor;
@@ -1164,7 +1156,7 @@ export const runSimulation = (
     // Comfortable Survival Rate: ends with ≥ 25% of post-setup starting real portfolio value.
     // Meaningfully different from successRate — separates "survived but depleted" from
     // "plan worked well with meaningful reserves remaining."
-    terminalSuccessRate: ((NUM_SIMULATIONS - comfortableFailures) / NUM_SIMULATIONS) * 100,
+    comfortableSurvivalRate: ((NUM_SIMULATIONS - comfortableFailures) / NUM_SIMULATIONS) * 100,
     comfortFloorValue: comfortThreshold,
     finalMedianValue: finalMedian,
     volatility: avgVol,
