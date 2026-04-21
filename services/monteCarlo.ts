@@ -134,13 +134,30 @@ function initializeStartingState(
     }
     state.bond = 0;
   } else {
-    const targetStockAmt = totalStartPortfolio * targetStockWeight;
-    const targetBondAmt = totalStartPortfolio * targetBondWeight;
-    const tradeVolume = Math.abs(initialInvestments - targetStockAmt) + targetBondAmt;
-    initialSetupCost = tradeVolume * TRANSACTION_COST;
-    const effectiveTotal = totalStartPortfolio - initialSetupCost;
-    state.stock = effectiveTotal * targetStockWeight;
-    state.bond = effectiveTotal * targetBondWeight;
+    // Fixed-mix setup starts from: stock=initialInvestments, bond=0, cash=initialCash.
+    // Transaction friction is applied on SELL orders only (same convention as BUCKET).
+    //
+    // When stock is overweight, solve sell volume exactly so post-cost stock dollars
+    // match the target weight of the post-cost total:
+    //   initialInvestments - x = w_s * (totalStartPortfolio - c * x)
+    // where x is gross stock sold and c is TRANSACTION_COST.
+    // This avoids tiny but compounding initialization drift from approximating
+    // setup cost as c * (initialInvestments - w_s * totalStartPortfolio).
+    const targetStockAmtPreCost = totalStartPortfolio * targetStockWeight;
+    const denominator = 1 - (targetStockWeight * TRANSACTION_COST);
+    const stockToSell = initialInvestments > targetStockAmtPreCost && denominator > 0
+      ? (initialInvestments - targetStockAmtPreCost) / denominator
+      : 0;
+    initialSetupCost = stockToSell * TRANSACTION_COST;
+    const effectiveTotal = Math.max(0, totalStartPortfolio - initialSetupCost);
+
+    // With stock overweight, keep the mechanically correct post-sale stock dollars.
+    // With stock underweight, no sell-side friction is needed and we can allocate
+    // exactly at target by deploying existing cash into stock/bonds.
+    state.stock = stockToSell > 0
+      ? Math.max(0, initialInvestments - stockToSell)
+      : effectiveTotal * targetStockWeight;
+    state.bond = Math.max(0, effectiveTotal - state.stock);
     state.cash = 0;
   }
 
@@ -471,8 +488,8 @@ const simulateYear = (
       //   transaction cost. When drift > 5 % we execute a full rebalance back to
       //   target, which also disciplines the buy-low/sell-high benefit.
       //
-      //   Within-band cost:  actualWithdrawal × TRANSACTION_COST
-      //   Outside-band cost: total-trade-volume × TRANSACTION_COST (larger)
+      //   Within-band cost: sell-side gross-up needed to net the withdrawal.
+      //   Outside-band cost: withdrawal sell-side gross-up + sell-side rebalance volume.
       //
       // currCash is 0 for fixed strategies: it is initialised to 0 and never
       // accumulates between years (all proceeds are redeployed into stocks/bonds).
@@ -487,23 +504,49 @@ const simulateYear = (
       if (total > 0.01) {
         if (drift > 0.05) {
           // OUTSIDE band: full corrective rebalance back to target weights.
-          // tradeAmount covers both funding the withdrawal AND correcting drift.
-          const targetStock = total * targetWeights.stock;
-          const targetBond = total * targetWeights.bond;
-          const tradeAmount = Math.abs(currStock - targetStock) + Math.abs(currBond - targetBond);
-          const rebalancingCost = tradeAmount * TRANSACTION_COST;
-          total -= rebalancingCost;
-          fees += rebalancingCost;
-          currStock = total * targetWeights.stock;
-          currBond = total * targetWeights.bond;
-          currCash = 0;
-          actionLog = `Mix drifted too far (${(drift * 100).toFixed(1)}%). Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
+          // Cost model: charge friction on SELL orders only (consistent with BUCKET).
+          // 1) Fund withdrawal from invested assets (no persistent cash sleeve here).
+          // 2) Rebalance remaining holdings back to target, charging sell-side friction.
+          const withdrawalSellCost = actualWithdrawal > 0
+            ? actualWithdrawal * (TRANSACTION_COST / (1 - TRANSACTION_COST))
+            : 0;
+          const grossWithdrawalLiquidation = actualWithdrawal + withdrawalSellCost;
+          total -= withdrawalSellCost;
+          fees += withdrawalSellCost;
+          if (total <= 0.01) {
+            currStock = 0; currBond = 0; currCash = 0;
+            actionLog = "Portfolio Depleted.";
+          } else {
+            // Post-withdrawal holdings before rebalance (proportional gross liquidation,
+            // including the sell-side friction needed to net the withdrawal).
+            const withdrawalFromStock = grossWithdrawalLiquidation * currentEquityRatio;
+            const withdrawalFromBond = grossWithdrawalLiquidation * (1 - currentEquityRatio);
+            const postWithdrawalStock = Math.max(0, currStock - withdrawalFromStock);
+            const postWithdrawalBond = Math.max(0, currBond - withdrawalFromBond);
+
+            const targetStock = total * targetWeights.stock;
+            const targetBond = total * targetWeights.bond;
+            const stockSellForRebalance = Math.max(0, postWithdrawalStock - targetStock);
+            const bondSellForRebalance = Math.max(0, postWithdrawalBond - targetBond);
+            const rebalancingSellVolume = stockSellForRebalance + bondSellForRebalance;
+            const rebalancingCost = rebalancingSellVolume * TRANSACTION_COST;
+            total -= rebalancingCost;
+            fees += rebalancingCost;
+            total = Math.max(0, total);
+            currStock = total * targetWeights.stock;
+            currBond = total * targetWeights.bond;
+            currCash = 0;
+            actionLog = `Mix drifted too far (${(drift * 100).toFixed(1)}%). Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
+          }
         } else {
           // WITHIN band (≤ 5 %): sell proportionally at the current allocation.
           // Only charge friction on the liquidation required to cover spending.
-          const withdrawalCost = actualWithdrawal * TRANSACTION_COST;
+          const withdrawalCost = actualWithdrawal > 0
+            ? actualWithdrawal * (TRANSACTION_COST / (1 - TRANSACTION_COST))
+            : 0;
           total -= withdrawalCost;
           fees += withdrawalCost;
+          total = Math.max(0, total);
           currStock = total * currentEquityRatio;
           currBond = total * (1 - currentEquityRatio);
           currCash = 0;
