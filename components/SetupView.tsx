@@ -383,8 +383,20 @@ const SetupView: React.FC<SetupViewProps> = ({
       errors.push('Inflation rate must be 0–15%.');
     if (!isFinite(formState.expectedStockReturn) || formState.expectedStockReturn < 0 || formState.expectedStockReturn > 30)
       errors.push('Expected stock return must be 0–30%.');
+    if (!isFinite(formState.expectedBondReturn) || formState.expectedBondReturn < 0 || formState.expectedBondReturn > 20)
+      errors.push('Expected bond return must be 0–20%.');
+    if (!isFinite(formState.expectedCashReturn) || formState.expectedCashReturn < 0 || formState.expectedCashReturn > 15)
+      errors.push('Expected cash return must be 0–15%.');
+    if (!isFinite(formState.expectedStockVolatility) || formState.expectedStockVolatility < 1 || formState.expectedStockVolatility > 60)
+      errors.push('Stock volatility must be 1–60%.');
     if (!isFinite(formState.managementFee) || formState.managementFee < 0 || formState.managementFee > 5)
       errors.push('Management fee must be 0–5%.');
+    if (!isFinite(formState.customStockAllocation) || formState.customStockAllocation < 0 || formState.customStockAllocation > 100)
+      errors.push('Custom stock allocation must be 0–100%.');
+    if (!isFinite(formState.customCashAllocation) || formState.customCashAllocation < 0 || formState.customCashAllocation > 100)
+      errors.push('Custom cash allocation must be 0–100%.');
+    if (formState.customStockAllocation + formState.customCashAllocation > 100)
+      errors.push('Custom stock + cash allocation must be 100% or less.');
 
     // --- CPA / Tax field validation ---
     if (formState.currentAge < 25 || formState.currentAge > 85)
@@ -595,13 +607,43 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
 
               <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Stock Return Volatility (Std Dev)</label>
+                <CurrencyInput
+                  value={formState.expectedStockVolatility}
+                  onChange={(v) => updateField('expectedStockVolatility', v)}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">How much stock returns vary year-to-year around the expected mean. Higher = wilder swings, more crash risk, but also more upside. Historical S&amp;P 500 annualized volatility: ~17%. A globally diversified portfolio might use 14–15%; a concentrated growth portfolio 20–25%.</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Expected Yearly Bond Return</label>
+                <CurrencyInput
+                  value={formState.expectedBondReturn}
+                  onChange={(v) => updateField('expectedBondReturn', v)}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Expected average annual return on bond holdings before inflation (nominal). Reflects long-term yields on investment-grade bonds. Use current 10-year Treasury yield as a forward-looking guide. Historical average: ~4%.</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Expected Yearly Cash / HYSA Return</label>
+                <CurrencyInput
+                  value={formState.expectedCashReturn}
+                  onChange={(v) => updateField('expectedCashReturn', v)}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Expected average annual return on money-market / HYSA holdings before inflation. Tracks short-term interest rates. Use current fed funds rate or HYSA rate as a guide. Historical average: ~2.5%.</p>
+              </div>
+
+              <div>
                 <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">Management Fee</label>
                 <CurrencyInput
                   value={formState.managementFee}
                   onChange={(v) => updateField('managementFee', v)}
                   suffix="%"
                 />
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Annual percentage fee on invested assets (stocks + bonds). Common range: 0.05% for index ETFs to 1.0% for actively managed funds. Deducted from your portfolio every year before withdrawals.</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">Annual percentage fee on all assets under management (stocks, bonds, and cash). Represents an RIA advisory fee or blended expense ratio charged on total AUM. Common range: 0.05% for index ETFs to 1.0% for actively managed accounts.</p>
               </div>
 
               {/* ── CPA / Tax Section ─────────────────────────────────── */}

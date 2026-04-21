@@ -21,6 +21,13 @@ const clampNumber = (value: unknown, min: number, max: number, fallback: number)
   return Math.min(max, Math.max(min, n));
 };
 
+const clampCustomAllocations = (stock: number, cash: number) => {
+  const safeStock = Math.round(clampNumber(stock, 0, 100, 0));
+  const safeCash = Math.round(clampNumber(cash, 0, 100, 0));
+  if (safeStock + safeCash <= 100) return { stock: safeStock, cash: safeCash };
+  return { stock: safeStock, cash: Math.max(0, 100 - safeStock) };
+};
+
 const sanitizeSpendingPhases = (rawPhases: unknown, horizon: number) => {
   const safeHorizon = Math.max(1, Math.floor(Number(horizon) || 1));
   const fallback = [{ id: 1, startYear: 0, endYear: safeHorizon, annualSpend: 30000 }];
@@ -101,8 +108,12 @@ const App: React.FC = () => {
       timeHorizon: 40,
       inflationRate: 3.0,
       expectedStockReturn: 8.5,
+      expectedBondReturn: 4.0,
+      expectedCashReturn: 2.5,
+      expectedStockVolatility: 17.0,
       managementFee: 0.10,
       customStockAllocation: 50,
+      customCashAllocation: 0,
       // CPA-grade defaults: typical pre-retiree profile
       currentAge: 65,
       taxDeferredRatio: 80,  // 80% in Traditional IRA/401(k) is common for US retirees
@@ -133,6 +144,7 @@ const App: React.FC = () => {
           percentileBelowAverage - 1,
           Math.round(clampNumber(merged.percentileDownturn, 1, 97, defaults.percentileDownturn))
         );
+        const customAllocations = clampCustomAllocations(merged.customStockAllocation, merged.customCashAllocation);
         return {
           ...merged,
           timeHorizon: safeHorizon,
@@ -140,8 +152,12 @@ const App: React.FC = () => {
           initialInvestments: clampNumber(merged.initialInvestments, 0, Number.MAX_SAFE_INTEGER, defaults.initialInvestments),
           inflationRate: clampNumber(merged.inflationRate, 0, 15, defaults.inflationRate),
           expectedStockReturn: clampNumber(merged.expectedStockReturn, 0, 30, defaults.expectedStockReturn),
+          expectedBondReturn: clampNumber(merged.expectedBondReturn, 0, 20, defaults.expectedBondReturn),
+          expectedCashReturn: clampNumber(merged.expectedCashReturn, 0, 15, defaults.expectedCashReturn),
+          expectedStockVolatility: clampNumber(merged.expectedStockVolatility, 1, 60, defaults.expectedStockVolatility),
           managementFee: clampNumber(merged.managementFee, 0, 5, defaults.managementFee),
-          customStockAllocation: Math.round(clampNumber(merged.customStockAllocation, 0, 100, defaults.customStockAllocation)),
+          customStockAllocation: customAllocations.stock,
+          customCashAllocation: customAllocations.cash,
           currentAge: Math.round(clampNumber(merged.currentAge, 25, 85, defaults.currentAge)),
           taxDeferredRatio: clampNumber(merged.taxDeferredRatio, 0, 100, defaults.taxDeferredRatio),
           withdrawalTaxRate: clampNumber(merged.withdrawalTaxRate, 0, 60, defaults.withdrawalTaxRate),
@@ -166,8 +182,9 @@ const App: React.FC = () => {
   }, [inputs]);
 
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyType>('BUCKET');
-  const [results, setResults] = useState<SimulationResult | null>(null);
+  const [allResults, setAllResults] = useState<Partial<Record<StrategyType, SimulationResult>>>({});
   const [simulationError, setSimulationError] = useState<string | null>(null);
+  const selectedResult = allResults[selectedStrategy] ?? null;
 
   // Debounce ref for the live custom-allocation slider so we don't block the
   // main thread on every slider tick.
@@ -225,7 +242,7 @@ const App: React.FC = () => {
           setIsSimulating(false);
           return;
         }
-        setResults(e.data.result);
+        setAllResults(prev => ({ ...prev, [strategy]: e.data.result }));
         // Only navigate / notify on success — mirrors the previous behaviour where
         // onComplete was not called inside `finally` to avoid stale-result navigation.
         onComplete?.();
@@ -247,6 +264,9 @@ const App: React.FC = () => {
   }, [getWorker]);
 
   const handleRunSimulation = (finalInputs: SimulationInputs) => {
+    // New setup run implies a new scenario baseline; clear prior strategy results
+    // so Compare view cannot mix stale outputs from older assumptions.
+    setAllResults({});
     setInputs(finalInputs);
     runSimulationAsync(finalInputs, selectedStrategy, () => {
       setView('SIMULATION');
@@ -255,8 +275,15 @@ const App: React.FC = () => {
   };
 
   const handleCustomAllocationChange = useCallback((newAlloc: number) => {
+    const boundedStock = Math.round(clampNumber(newAlloc, 0, 100, 0));
+    const boundedCash = Math.min(latestInputsRef.current.customCashAllocation, Math.max(0, 100 - boundedStock));
+    const nextInputs = {
+      ...latestInputsRef.current,
+      customStockAllocation: boundedStock,
+      customCashAllocation: boundedCash,
+    };
     // Immediately update the displayed slider value (cheap — no simulation).
-    setInputs(prev => ({ ...prev, customStockAllocation: newAlloc }));
+    setInputs(nextInputs);
 
     // Debounce the expensive 100,000-scenario re-run so rapid slider drags don't
     // queue up many overlapping worker dispatches.
@@ -265,9 +292,23 @@ const App: React.FC = () => {
       // Use the ref (not a closure over `inputs`) to guarantee we read the
       // most-recent state without triggering the Strict Mode double-invoke issue.
       runSimulationAsync(
-        { ...latestInputsRef.current, customStockAllocation: newAlloc },
+        nextInputs,
         'CUSTOM'
       );
+    }, 150);
+  }, [runSimulationAsync]);
+
+  const handleCustomCashAllocationChange = useCallback((newAlloc: number) => {
+    const maxCash = Math.max(0, 100 - latestInputsRef.current.customStockAllocation);
+    const boundedCash = Math.round(clampNumber(newAlloc, 0, maxCash, 0));
+    const nextInputs = {
+      ...latestInputsRef.current,
+      customCashAllocation: boundedCash,
+    };
+    setInputs(nextInputs);
+    if (sliderDebounceRef.current) clearTimeout(sliderDebounceRef.current);
+    sliderDebounceRef.current = setTimeout(() => {
+      runSimulationAsync(nextInputs, 'CUSTOM');
     }, 150);
   }, [runSimulationAsync]);
 
@@ -318,7 +359,7 @@ const App: React.FC = () => {
           onRun={handleRunSimulation}
           isDarkMode={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-          hasResult={!!results}
+          hasResult={Object.keys(allResults).length > 0}
           onShowResult={() => {
             setView('SIMULATION');
             window.scrollTo(0, 0);
@@ -326,15 +367,17 @@ const App: React.FC = () => {
         />
       )}
 
-      {view === 'SIMULATION' && results && (
+      {view === 'SIMULATION' && selectedResult && (
         <SimulationView
           inputs={inputs}
-          results={results}
+          results={selectedResult}
+          allResults={allResults}
           selectedStrategy={selectedStrategy}
           setSelectedStrategy={setSelectedStrategy}
           onEdit={() => setView('SETUP')}
           onRun={() => runSimulationAsync(inputs, selectedStrategy)}
           onCustomAllocationChange={handleCustomAllocationChange}
+          onCustomCashAllocationChange={handleCustomCashAllocationChange}
           isDarkMode={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />

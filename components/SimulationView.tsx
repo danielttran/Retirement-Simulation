@@ -55,11 +55,13 @@ const CustomTooltip = ({ active, payload, label, startYear, currentAge }: Custom
 interface SimulationViewProps {
   inputs: SimulationInputs;
   results: SimulationResult;
+  allResults: Partial<Record<StrategyType, SimulationResult>>;
   selectedStrategy: StrategyType;
   setSelectedStrategy: (s: StrategyType) => void;
   onEdit: () => void;
   onRun: () => void;
   onCustomAllocationChange: (alloc: number) => void;
+  onCustomCashAllocationChange: (alloc: number) => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
 }
@@ -67,14 +69,18 @@ interface SimulationViewProps {
 const SimulationView: React.FC<SimulationViewProps> = ({
   inputs,
   results,
+  allResults,
   selectedStrategy,
   setSelectedStrategy,
   onEdit,
   onRun,
   onCustomAllocationChange,
+  onCustomCashAllocationChange,
   isDarkMode,
   onToggleDarkMode
 }) => {
+  type StrategyTab = 'COMPARE' | StrategyType;
+  const [activeTab, setActiveTab] = useState<StrategyTab>(selectedStrategy);
   const [viewDuration, setViewDuration] = useState<number | 'MAX'>('MAX');
   const [auditMode, setAuditMode] = useState(false);
   const [auditScenario, setAuditScenario] = useState<'AVERAGE' | 'BELOW' | 'DOWNTURN'>('BELOW');
@@ -90,7 +96,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
       case 'BUCKET': return 'Bucket Strategy';
       case 'CONSERVATIVE': return '60/40 Split (60% Stock / 40% Bond)';
       case 'AGGRESSIVE': return '70/30 Split (70% Stock / 30% Bond)';
-      case 'CUSTOM': return `Custom Allocation (${inputs.customStockAllocation}% Stock / ${100 - inputs.customStockAllocation}% Bond)`;
+      case 'CUSTOM': return `Custom Allocation (${inputs.customStockAllocation}% Stock / ${100 - inputs.customStockAllocation - inputs.customCashAllocation}% Bond / ${inputs.customCashAllocation}% Cash)`;
     }
   };
 
@@ -121,7 +127,7 @@ Target Allocation: ${(results.allocation.stock * 100).toFixed(1)}% Stock / ${(re
 
 --- SIMULATION MODEL (for your reference) ---
 Engine: 100,000-path Monte Carlo, log-normal returns, Cholesky correlation (Stock–Bond ρ=−0.15)
-Market Assumptions: Stock μ=${inputs.expectedStockReturn}%/σ=17%, Bond μ=4.0%/σ=5%, Cash μ=2.5%/σ=1.5% (all nominal)
+Market Assumptions: Stock μ=${inputs.expectedStockReturn}%/σ=${inputs.expectedStockVolatility}%, Bond μ=${inputs.expectedBondReturn}%/σ=5%, Cash μ=${inputs.expectedCashReturn}%/σ=1.5% (all nominal)
 Transaction Cost: 0.05% friction applied to all sell/buy/rebalance trades (in addition to the annual management fee)
 Stochastic Inflation: N(${inputs.inflationRate}%, 1.5%²) drawn per year; correlated −0.30 with equity draw
 Jump Diffusion (Merton): 2% annual probability of an extra 20–40% equity drawdown beyond log-normal
@@ -364,11 +370,12 @@ ${auditSample}
       );
     } else {
       const stockPct = s === 'CONSERVATIVE' ? 60 : s === 'AGGRESSIVE' ? 70 : inputs.customStockAllocation;
-      const bondPct = 100 - stockPct;
+      const cashPct = s === 'CUSTOM' ? inputs.customCashAllocation : 0;
+      const bondPct = 100 - stockPct - cashPct;
       return (
         <>
           <p className="mb-4">
-            A traditional <strong>Target Mix</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond ratio.
+            A traditional <strong>Target Mix</strong> strategy that maintains a constant {stockPct}% Stock / {bondPct}% Bond{cashPct > 0 ? ` / ${cashPct}% Cash` : ''} ratio.
           </p>
           <p className="mb-2 font-bold text-slate-700 text-[11px] uppercase tracking-wide">Rules of Operation (Automatic Rebalancing):</p>
           <ul className="list-disc pl-4 space-y-2 mb-4">
@@ -388,6 +395,7 @@ ${auditSample}
   }
 
   const handleStrategyChange = (s: StrategyType) => {
+    setActiveTab(s);
     setSelectedStrategy(s);
   };
 
@@ -440,6 +448,10 @@ ${auditSample}
   const handleCustomSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVal = parseInt(e.target.value);
     onCustomAllocationChange(newVal);
+  }
+  const handleCustomCashSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = parseInt(e.target.value);
+    onCustomCashAllocationChange(newVal);
   }
 
   const getAuditData = (): AuditRow[] => {
@@ -582,13 +594,24 @@ ${auditSample}
         {/* Strategy Tabs */}
         <div className="mb-5 border-b border-slate-200 dark:border-slate-800 transition-colors overflow-x-auto">
           <div className="flex gap-8 md:gap-12 min-w-max" role="tablist" aria-label="Investment strategies">
+            <button
+              role="tab"
+              aria-selected={activeTab === 'COMPARE'}
+              onClick={() => setActiveTab('COMPARE')}
+              className={`pb-5 text-sm font-medium transition-all border-b-2 ${activeTab === 'COMPARE'
+                ? 'text-slate-900 dark:text-slate-100 border-primary font-bold'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 border-transparent'
+                }`}
+            >
+              Compare All
+            </button>
             {(['BUCKET', 'CONSERVATIVE', 'AGGRESSIVE', 'CUSTOM'] as StrategyType[]).map((t) => (
               <button
                 key={t}
                 role="tab"
-                aria-selected={selectedStrategy === t}
+                aria-selected={activeTab === t}
                 onClick={() => handleStrategyChange(t)}
-                className={`pb-5 text-sm font-medium transition-all border-b-2 ${selectedStrategy === t
+                className={`pb-5 text-sm font-medium transition-all border-b-2 ${activeTab === t
                   ? 'text-slate-900 dark:text-slate-100 border-primary font-bold'
                   : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 border-transparent'
                   }`}
@@ -599,7 +622,7 @@ ${auditSample}
                 {t === 'CUSTOM' && (
                   <span className="flex items-center gap-2">
                     Custom Allocation
-                    {selectedStrategy === 'CUSTOM' && <span className="bg-primary/20 dark:bg-primary/10 text-slate-800 dark:text-primary text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter">Live</span>}
+                    {activeTab === 'CUSTOM' && <span className="bg-primary/20 dark:bg-primary/10 text-slate-800 dark:text-primary text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter">Live</span>}
                   </span>
                 )}
               </button>
@@ -607,6 +630,43 @@ ${auditSample}
           </div>
         </div>
 
+        {activeTab === 'COMPARE' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+            {(['BUCKET', 'CONSERVATIVE', 'AGGRESSIVE', 'CUSTOM'] as StrategyType[]).map((strategy) => {
+              const strategyResult = allResults[strategy];
+              const allocation = strategyResult?.allocation ?? { stock: 0, bond: 0, cash: 0 };
+              return (
+                <div key={strategy} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-3">{getStrategyLabel(strategy)}</h3>
+                  <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2 flex">
+                    <div className="bg-green-600 h-full" style={{ width: `${allocation.stock * 100}%` }} />
+                    <div className="bg-slate-500 h-full" style={{ width: `${allocation.bond * 100}%` }} />
+                    <div className="bg-primary h-full" style={{ width: `${allocation.cash * 100}%` }} />
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-4">
+                    {`${(allocation.stock * 100).toFixed(0)}% Stock / ${(allocation.bond * 100).toFixed(0)}% Bond / ${(allocation.cash * 100).toFixed(0)}% Cash`}
+                  </p>
+                  {strategyResult ? (
+                    <div className="space-y-2">
+                      <p className={`text-3xl font-bold ${strategyResult.successRate > 90 ? 'text-emerald-600 dark:text-emerald-500' : strategyResult.successRate > 75 ? 'text-amber-600 dark:text-amber-500' : 'text-red-600 dark:text-red-500'}`}>
+                        {strategyResult.successRate.toFixed(1)}%
+                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Success Rate</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Comfortable Survival: <span className="font-bold">{strategyResult.comfortableSurvivalRate.toFixed(1)}%</span></p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Median Final Balance: <span className="font-bold text-slate-800 dark:text-slate-200">${strategyResult.finalMedianValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Volatility: <span className="font-bold">{strategyResult.volatility.toFixed(1)}%</span></p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Run this strategy tab once to populate comparison metrics.</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {activeTab !== 'COMPARE' && (
+          <>
         <div className="flex flex-wrap justify-start items-center mb-6 gap-6">
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 hidden md:block">Analysis Dashboard</h2>
           <div className="flex items-center gap-3">
@@ -816,26 +876,43 @@ ${auditSample}
 
               {/* Custom Allocation Slider */}
               {selectedStrategy === 'CUSTOM' && (
-                <div className="mb-8 p-6 bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800 rounded-xl animate-in fade-in slide-in-from-top-2">
-                  <div className="flex justify-between items-center mb-4">
-                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                      Stock / Bond Allocation
-                    </label>
+                <div className="mb-8 p-6 bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800 rounded-xl animate-in fade-in slide-in-from-top-2 space-y-5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Custom Allocation</label>
                     <span className="text-sm font-bold bg-white dark:bg-slate-900 px-3 py-1 rounded border border-slate-200 dark:border-slate-800 shadow-sm dark:text-slate-100">
-                      {inputs.customStockAllocation}% Stocks / {100 - inputs.customStockAllocation}% Bonds
+                      {inputs.customStockAllocation}% Stock / {100 - inputs.customStockAllocation - inputs.customCashAllocation}% Bond / {inputs.customCashAllocation}% Cash
                     </span>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500 w-16 text-right">0% Equity</span>
+                  <div>
+                    <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">
+                      <span>Stock %</span>
+                      <span>{inputs.customStockAllocation}%</span>
+                    </div>
                     <input
                       className="w-full h-2 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
-                      max="100" min="0" step="5"
+                      max="100" min="0" step="1"
                       type="range"
                       value={inputs.customStockAllocation}
                       onChange={handleCustomSliderChange}
                     />
-                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500 w-16">100% Equity</span>
                   </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">
+                      <span>Cash Allocation</span>
+                      <span>{inputs.customCashAllocation}%</span>
+                    </div>
+                    <input
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg appearance-none cursor-pointer"
+                      max={Math.max(0, 100 - inputs.customStockAllocation)} min="0" step="1"
+                      type="range"
+                      value={inputs.customCashAllocation}
+                      onChange={handleCustomCashSliderChange}
+                    />
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Bond: <span className="font-bold text-slate-700 dark:text-slate-200">{100 - inputs.customStockAllocation - inputs.customCashAllocation}%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Hold a cash sleeve within this strategy (HYSA / money market). The bond allocation is the remainder: 100% − Stock% − Cash%. Setting cash &gt; 0 allows you to compare directly against the Bucket Strategy on equal footing.</p>
                 </div>
               )}
 
@@ -1312,7 +1389,7 @@ ${auditSample}
               <div className="px-6 pb-5 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3 leading-relaxed">
                   The following parameters are calibrated from peer-reviewed financial research and IRS publications.
-                  They are not exposed as user inputs to prevent inappropriate miscalibration.
+                  Core stochastic parameters are fixed from research, while expected stock/bond/cash returns and stock volatility are user-configurable for scenario analysis.
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-3 text-xs">
                   {([
@@ -1340,6 +1417,10 @@ ${auditSample}
             </details>
           </div>
         </div>
+
+          </>
+        )}
+
       </main >
     </div >
   );
