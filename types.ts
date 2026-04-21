@@ -12,8 +12,12 @@ export interface SimulationInputs {
   timeHorizon: number;
   inflationRate: number;
   expectedStockReturn: number;
+  expectedBondReturn: number;   // nominal %, e.g. 4.0
+  expectedCashReturn: number;   // nominal %, e.g. 2.5
+  expectedStockVolatility: number;  // nominal %, e.g. 17.0
   managementFee: number;
   customStockAllocation: number; // 0 to 100
+  customCashAllocation: number;  // 0 to 100; bond = 100 - stock - cash
   // --- Tax & RMD (CPA-grade) ---
   currentAge: number;        // User's age at retirement start — drives RMD schedule
   taxDeferredRatio: number;  // 0–100: % of investable assets held in Traditional IRA / 401(k)

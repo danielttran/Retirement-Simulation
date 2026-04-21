@@ -105,6 +105,7 @@ function initializeStartingState(
   strategy: StrategyType,
   targetStockWeight: number,
   targetBondWeight: number,
+  targetCashWeight: number,
   initialSpend: number
 ): { state: SimState; initialSetupCost: number } {
   const { initialCash, initialInvestments } = inputs;
@@ -157,8 +158,14 @@ function initializeStartingState(
     state.stock = stockToSell > 0
       ? Math.max(0, initialInvestments - stockToSell)
       : effectiveTotal * targetStockWeight;
-    state.bond = Math.max(0, effectiveTotal - state.stock);
-    state.cash = 0;
+    if (strategy === 'CUSTOM' && targetCashWeight > 0) {
+      state.stock = effectiveTotal * targetStockWeight;
+      state.bond = effectiveTotal * targetBondWeight;
+      state.cash = effectiveTotal * targetCashWeight;
+    } else {
+      state.bond = Math.max(0, effectiveTotal - state.stock);
+      state.cash = 0;
+    }
   }
 
   return { state, initialSetupCost };
@@ -366,7 +373,7 @@ const simulateYear = (
   returns: { stock: number, bond: number, cash: number },
   inputs: SimulationInputs,
   strategy: StrategyType,
-  targetWeights: { stock: number, bond: number }
+  targetWeights: { stock: number, bond: number, cash: number }
 ): YearOutcome => {
   const { managementFee } = inputs;
   const isBucketStrategy = strategy === 'BUCKET';
@@ -382,12 +389,13 @@ const simulateYear = (
   const feeRate = managementFee / 100;
   const stockFee = grossStock * feeRate;
   const bondFee = grossBond * feeRate;
+  const cashFee = grossCash * feeRate;
 
   let currStock = grossStock - stockFee;
   let currBond = grossBond - bondFee;
-  let currCash = grossCash;
+  let currCash = grossCash - cashFee;
 
-  let fees = stockFee + bondFee;
+  let fees = stockFee + bondFee + cashFee;
 
   // 3. Determine Withdrawal
   // Cash can be spent directly at zero friction; only invested assets (stock/bond)
@@ -494,10 +502,17 @@ const simulateYear = (
       // currCash is 0 for fixed strategies: it is initialised to 0 and never
       // accumulates between years (all proceeds are redeployed into stocks/bonds).
       const preWithdrawalTotal = currStock + currBond + currCash;
-      const currentEquityRatio = preWithdrawalTotal > 0.01
-        ? currStock / preWithdrawalTotal
-        : targetWeights.stock;
-      const drift = Math.abs(currentEquityRatio - targetWeights.stock);
+      const hasTargetCash = strategy === 'CUSTOM' && targetWeights.cash > 0;
+      const currentStockRatio = preWithdrawalTotal > 0.01 ? currStock / preWithdrawalTotal : targetWeights.stock;
+      const currentBondRatio = preWithdrawalTotal > 0.01 ? currBond / preWithdrawalTotal : targetWeights.bond;
+      const currentCashRatio = preWithdrawalTotal > 0.01 ? currCash / preWithdrawalTotal : targetWeights.cash;
+      const drift = hasTargetCash
+        ? Math.max(
+          Math.abs(currentStockRatio - targetWeights.stock),
+          Math.abs(currentBondRatio - targetWeights.bond),
+          Math.abs(currentCashRatio - targetWeights.cash)
+        )
+        : Math.abs(currentStockRatio - targetWeights.stock);
 
       let total = preWithdrawalTotal - actualWithdrawal;
 
@@ -507,10 +522,13 @@ const simulateYear = (
           // Cost model: charge friction on SELL orders only (consistent with BUCKET).
           // 1) Fund withdrawal from invested assets (no persistent cash sleeve here).
           // 2) Rebalance remaining holdings back to target, charging sell-side friction.
-          const withdrawalSellCost = actualWithdrawal > 0
-            ? actualWithdrawal * (TRANSACTION_COST / (1 - TRANSACTION_COST))
+          const investedTotal = currStock + currBond;
+          const investedShare = preWithdrawalTotal > 0 ? investedTotal / preWithdrawalTotal : 0;
+          const investedNetWithdrawal = actualWithdrawal * investedShare;
+          const withdrawalSellCost = investedNetWithdrawal > 0
+            ? investedNetWithdrawal * (TRANSACTION_COST / (1 - TRANSACTION_COST))
             : 0;
-          const grossWithdrawalLiquidation = actualWithdrawal + withdrawalSellCost;
+          const grossWithdrawalLiquidation = investedNetWithdrawal + withdrawalSellCost;
           total -= withdrawalSellCost;
           fees += withdrawalSellCost;
           if (total <= 0.01) {
@@ -519,13 +537,15 @@ const simulateYear = (
           } else {
             // Post-withdrawal holdings before rebalance (proportional gross liquidation,
             // including the sell-side friction needed to net the withdrawal).
-            const withdrawalFromStock = grossWithdrawalLiquidation * currentEquityRatio;
-            const withdrawalFromBond = grossWithdrawalLiquidation * (1 - currentEquityRatio);
+            const stockShareOfInvested = investedTotal > 0 ? currStock / investedTotal : targetWeights.stock;
+            const withdrawalFromStock = grossWithdrawalLiquidation * stockShareOfInvested;
+            const withdrawalFromBond = grossWithdrawalLiquidation * (1 - stockShareOfInvested);
             const postWithdrawalStock = Math.max(0, currStock - withdrawalFromStock);
             const postWithdrawalBond = Math.max(0, currBond - withdrawalFromBond);
 
             const targetStock = total * targetWeights.stock;
             const targetBond = total * targetWeights.bond;
+            const targetCash = total * targetWeights.cash;
             const stockSellForRebalance = Math.max(0, postWithdrawalStock - targetStock);
             const bondSellForRebalance = Math.max(0, postWithdrawalBond - targetBond);
             const rebalancingSellVolume = stockSellForRebalance + bondSellForRebalance;
@@ -535,22 +555,27 @@ const simulateYear = (
             total = Math.max(0, total);
             currStock = total * targetWeights.stock;
             currBond = total * targetWeights.bond;
-            currCash = 0;
-            actionLog = `Mix drifted too far (${(drift * 100).toFixed(1)}%). Rebalanced to ${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)} target.`;
+            currCash = total * targetWeights.cash;
+            const targetLabel = `${Math.round(targetWeights.stock * 100)}/${Math.round(targetWeights.bond * 100)}${hasTargetCash ? `/${Math.round(targetWeights.cash * 100)}` : ''}`;
+            actionLog = `Mix drifted too far (${(drift * 100).toFixed(1)}%). Rebalanced to ${targetLabel} target.`;
           }
         } else {
           // WITHIN band (≤ 5 %): sell proportionally at the current allocation.
           // Only charge friction on the liquidation required to cover spending.
-          const withdrawalCost = actualWithdrawal > 0
-            ? actualWithdrawal * (TRANSACTION_COST / (1 - TRANSACTION_COST))
+          const investedTotal = currStock + currBond;
+          const investedShare = preWithdrawalTotal > 0 ? investedTotal / preWithdrawalTotal : 0;
+          const investedNetWithdrawal = actualWithdrawal * investedShare;
+          const withdrawalCost = investedNetWithdrawal > 0
+            ? investedNetWithdrawal * (TRANSACTION_COST / (1 - TRANSACTION_COST))
             : 0;
           total -= withdrawalCost;
           fees += withdrawalCost;
           total = Math.max(0, total);
-          currStock = total * currentEquityRatio;
-          currBond = total * (1 - currentEquityRatio);
-          currCash = 0;
-          actionLog = `Mix stayed within 5% limit. Normal withdrawal at ${Math.round(currentEquityRatio * 100)}/${Math.round((1 - currentEquityRatio) * 100)}, without extra rebalancing trades.`;
+          currStock = total * currentStockRatio;
+          currBond = total * currentBondRatio;
+          currCash = total * currentCashRatio;
+          const mixLabel = `${Math.round(currentStockRatio * 100)}/${Math.round(currentBondRatio * 100)}${hasTargetCash ? `/${Math.round(currentCashRatio * 100)}` : ''}`;
+          actionLog = `Mix stayed within 5% limit. Normal withdrawal at ${mixLabel}, without extra rebalancing trades.`;
         }
       } else {
         currStock = 0; currBond = 0; currCash = 0;
@@ -586,17 +611,22 @@ const generateAuditLog = (
   nominalAssumptions: typeof NOMINAL_ASSUMPTIONS = NOMINAL_ASSUMPTIONS // passed from runSimulation to match simulation engine
 ): AuditRow[] => {
   const log: AuditRow[] = [];
-  const { initialCash, initialInvestments, spendingPhases, customStockAllocation } = inputs;
+  const { initialCash, initialInvestments, spendingPhases } = inputs;
   const totalStartPortfolio = initialCash + initialInvestments;
 
   let targetStockWeight = 0;
   let targetBondWeight = 0;
+  let targetCashWeight = 0;
   if (strategy === 'CONSERVATIVE') { targetBondWeight = 0.40; targetStockWeight = 0.60; }
   else if (strategy === 'AGGRESSIVE') { targetBondWeight = 0.30; targetStockWeight = 0.70; }
-  else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
+  else if (strategy === 'CUSTOM') {
+    targetStockWeight = inputs.customStockAllocation / 100;
+    targetCashWeight = inputs.customCashAllocation / 100;
+    targetBondWeight = Math.max(0, 1.0 - targetStockWeight - targetCashWeight);
+  }
 
   const initialSpend = getSpendingForYear(0, spendingPhases);
-  const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, initialSpend);
+  const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, targetCashWeight, initialSpend);
   let state = initialized.state;
   // capture the one-time setup friction so Year 1 of the audit log can
   // surface it as an explicit fee. Without this, the starting balance appears lower
@@ -791,7 +821,7 @@ const generateAuditLog = (
     // by generateAnnualReturns(dynamicAssumptions, ...) in runSimulation, so the audit
     // rows reflect the user's expectedStockReturn automatically via the stored returns.
 
-    const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
+    const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight, cash: targetCashWeight });
 
     // When the portfolio is nearly depleted, simulateYear caps actualWithdrawal below
     // state.spend. Scale taxOwed proportionally so the audit doesn't show more tax
@@ -855,14 +885,19 @@ export const runSimulation = (
   // bleed into the first sample of this run.
   randnCached = null;
 
-  const { initialCash, initialInvestments, spendingPhases, timeHorizon, customStockAllocation, inflationRate } = inputs;
+  const { initialCash, initialInvestments, spendingPhases, timeHorizon, inflationRate } = inputs;
   const totalStartPortfolio = initialCash + initialInvestments;
 
   let targetStockWeight = 0;
   let targetBondWeight = 0;
+  let targetCashWeight = 0;
   if (strategy === 'CONSERVATIVE') { targetBondWeight = 0.40; targetStockWeight = 0.60; }
   else if (strategy === 'AGGRESSIVE') { targetBondWeight = 0.30; targetStockWeight = 0.70; }
-  else if (strategy === 'CUSTOM') { targetStockWeight = customStockAllocation / 100; targetBondWeight = 1.0 - targetStockWeight; }
+  else if (strategy === 'CUSTOM') {
+    targetStockWeight = inputs.customStockAllocation / 100;
+    targetCashWeight = inputs.customCashAllocation / 100;
+    targetBondWeight = Math.max(0, 1.0 - targetStockWeight - targetCashWeight);
+  }
 
   // meanInflation passed to generateAnnualReturns as a decimal.
   // Stochastic inflation is drawn per-year inside that function, so there is no
@@ -870,8 +905,9 @@ export const runSimulation = (
   const meanInflation = inflationRate / 100;
 
   const dynamicAssumptions = {
-    ...NOMINAL_ASSUMPTIONS,
-    STOCK: { ...NOMINAL_ASSUMPTIONS.STOCK, mean: inputs.expectedStockReturn / 100 }
+    STOCK: { mean: inputs.expectedStockReturn / 100, stdDev: inputs.expectedStockVolatility / 100 },
+    BOND: { mean: inputs.expectedBondReturn / 100, stdDev: NOMINAL_ASSUMPTIONS.BOND.stdDev },
+    CASH: { mean: inputs.expectedCashReturn / 100, stdDev: NOMINAL_ASSUMPTIONS.CASH.stdDev },
   };
 
   const allRuns: SimulationRun[] = [];
@@ -886,12 +922,12 @@ export const runSimulation = (
   let totalAnnualizedVol = 0;
 
   const initialSpend = getSpendingForYear(0, spendingPhases);
-  const initializedForThreshold = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, initialSpend);
+  const initializedForThreshold = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, targetCashWeight, initialSpend);
   const startAfterSetup = initializedForThreshold.state.stock + initializedForThreshold.state.bond + initializedForThreshold.state.cash;
   const comfortThreshold = startAfterSetup * 0.25;
 
   for (let sim = 0; sim < NUM_SIMULATIONS; sim++) {
-    const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, initialSpend);
+    const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, targetCashWeight, initialSpend);
     let state = initialized.state;
 
     const currentRunReturns: { stock: number; bond: number; cash: number; inflation: number; crashed: boolean }[] = [];
@@ -1027,7 +1063,7 @@ export const runSimulation = (
       const returns = generateAnnualReturns(dynamicAssumptions, meanInflation);
       currentRunReturns.push(returns);
 
-      const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight });
+      const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight, cash: targetCashWeight });
 
       state = outcome.nextState;
 
@@ -1175,7 +1211,7 @@ export const runSimulation = (
   // Display Allocation Calc
   let dispStock = targetStockWeight;
   let dispBond = targetBondWeight;
-  let dispCash = 0;
+  let dispCash = targetCashWeight;
   if (strategy === 'BUCKET') {
     // Use the same grossed-up initial spend as the simulation initialization so
     // the displayed allocation exactly matches what the engine sets up on day one.
