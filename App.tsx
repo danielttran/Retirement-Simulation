@@ -24,6 +24,8 @@ const clampNumber = (value: unknown, min: number, max: number, fallback: number)
 const sanitizeSpendingPhases = (rawPhases: unknown, horizon: number) => {
   const safeHorizon = Math.max(1, Math.floor(Number(horizon) || 1));
   const fallback = [{ id: 1, startYear: 0, endYear: safeHorizon, annualSpend: 30000 }];
+  const withStableIds = <T extends { id: number }>(phases: T[]) =>
+    phases.map((phase, index) => ({ ...phase, id: index + 1 }));
   if (!Array.isArray(rawPhases) || rawPhases.length === 0) return fallback;
 
   const parsed = (rawPhases as RawSpendingPhase[])
@@ -57,7 +59,7 @@ const sanitizeSpendingPhases = (rawPhases: unknown, horizon: number) => {
     }
   }
   withinHorizon[withinHorizon.length - 1].endYear = safeHorizon;
-  return withinHorizon;
+  return withStableIds(withinHorizon);
 };
 
 // Loading overlay component
