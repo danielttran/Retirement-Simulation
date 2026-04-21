@@ -185,6 +185,8 @@ const App: React.FC = () => {
   const [allResults, setAllResults] = useState<Partial<Record<StrategyType, SimulationResult>>>({});
   const [simulationError, setSimulationError] = useState<string | null>(null);
   const selectedResult = allResults[selectedStrategy] ?? null;
+  const [lastVisibleResults, setLastVisibleResults] = useState<Partial<Record<StrategyType, SimulationResult>>>({});
+  const renderResult = selectedResult ?? lastVisibleResults[selectedStrategy] ?? null;
 
   // Debounce ref for the live custom-allocation slider so we don't block the
   // main thread on every slider tick.
@@ -203,6 +205,7 @@ const App: React.FC = () => {
   // (the prior result is discarded when the new message arrives).
   const workerRef = useRef<Worker | null>(null);
   const runningIdRef = useRef<number>(0);
+  const compareRunInFlightRef = useRef(false);
   const getWorker = useCallback((): Worker => {
     if (!workerRef.current) {
       // Vite module-worker syntax: the bundler co-locates the worker chunk and
@@ -218,57 +221,58 @@ const App: React.FC = () => {
 
   // Simulation runner — dispatches work to the Web Worker so the main thread
   // (and loading overlay animation) remain responsive during the 100k-scenario run.
-  const runSimulationAsync = useCallback((simInputs: SimulationInputs, strategy: StrategyType, onComplete?: () => void) => {
+  const runSimulationAsync = useCallback((simInputs: SimulationInputs, strategy: StrategyType): Promise<boolean> => {
     setIsSimulating(true);
     setSimulationError(null);
 
     runningIdRef.current += 1;
     const currentRunId = runningIdRef.current;
-
     const worker = getWorker();
 
-    // Replace the message handler for this invocation (handles superseded runs).
-    worker.onmessage = (e: MessageEvent<{ type: 'result' | 'error'; requestId: number; result?: SimulationResult; message?: string }>) => {
-      // Critical race guard:
-      // With a single worker, messages are processed FIFO. If the user triggers run B
-      // while run A is still computing, run A's response can arrive after we've already
-      // installed run B's handler. We must therefore key off the worker's echoed
-      // requestId (not only the closure's currentRunId) so stale responses are ignored.
-      if (e.data.requestId !== runningIdRef.current || currentRunId !== runningIdRef.current) return;
-      const { type } = e.data;
-      if (type === 'result') {
-        if (!e.data.result) {
-          setSimulationError('Simulation worker returned an empty result payload.');
+    return new Promise<boolean>((resolve) => {
+      // Replace the message handler for this invocation (handles superseded runs).
+      worker.onmessage = (e: MessageEvent<{ type: 'result' | 'error'; requestId: number; result?: SimulationResult; message?: string }>) => {
+        if (e.data.requestId !== runningIdRef.current || currentRunId !== runningIdRef.current) return;
+        const { type } = e.data;
+        if (type === 'result') {
+          if (!e.data.result) {
+            setSimulationError('Simulation worker returned an empty result payload.');
+            setIsSimulating(false);
+            resolve(false);
+            return;
+          }
+          setAllResults(prev => ({ ...prev, [strategy]: e.data.result }));
           setIsSimulating(false);
+          resolve(true);
           return;
         }
-        setAllResults(prev => ({ ...prev, [strategy]: e.data.result }));
-        // Only navigate / notify on success — mirrors the previous behaviour where
-        // onComplete was not called inside `finally` to avoid stale-result navigation.
-        onComplete?.();
-      } else {
+
         console.error('Simulation worker error:', e.data.message);
         setSimulationError(e.data.message ?? 'Unexpected simulation error.');
-      }
-      setIsSimulating(false);
-    };
+        setIsSimulating(false);
+        resolve(false);
+      };
 
-    worker.onerror = (err) => {
-      if (currentRunId !== runningIdRef.current) return;
-      console.error('Simulation worker uncaught error:', err);
-      setSimulationError(err.message ?? 'Unexpected simulation error.');
-      setIsSimulating(false);
-    };
+      worker.onerror = (err) => {
+        if (currentRunId !== runningIdRef.current) return;
+        console.error('Simulation worker uncaught error:', err);
+        setSimulationError(err.message ?? 'Unexpected simulation error.');
+        setIsSimulating(false);
+        resolve(false);
+      };
 
-    worker.postMessage({ requestId: currentRunId, inputs: simInputs, strategy });
+      worker.postMessage({ requestId: currentRunId, inputs: simInputs, strategy });
+    });
   }, [getWorker]);
 
   const handleRunSimulation = (finalInputs: SimulationInputs) => {
     // New setup run implies a new scenario baseline; clear prior strategy results
     // so Compare view cannot mix stale outputs from older assumptions.
     setAllResults({});
+    setLastVisibleResults({});
     setInputs(finalInputs);
-    runSimulationAsync(finalInputs, selectedStrategy, () => {
+    void runSimulationAsync(finalInputs, selectedStrategy).then((wasSuccessful) => {
+      if (!wasSuccessful) return;
       setView('SIMULATION');
       window.scrollTo(0, 0);
     });
@@ -282,6 +286,8 @@ const App: React.FC = () => {
       customStockAllocation: boundedStock,
       customCashAllocation: boundedCash,
     };
+    setAllResults({});
+    setLastVisibleResults({});
     // Immediately update the displayed slider value (cheap — no simulation).
     setInputs(nextInputs);
 
@@ -291,7 +297,7 @@ const App: React.FC = () => {
     sliderDebounceRef.current = setTimeout(() => {
       // Use the ref (not a closure over `inputs`) to guarantee we read the
       // most-recent state without triggering the Strict Mode double-invoke issue.
-      runSimulationAsync(
+      void runSimulationAsync(
         nextInputs,
         'CUSTOM'
       );
@@ -305,19 +311,42 @@ const App: React.FC = () => {
       ...latestInputsRef.current,
       customCashAllocation: boundedCash,
     };
+    setAllResults({});
+    setLastVisibleResults({});
     setInputs(nextInputs);
     if (sliderDebounceRef.current) clearTimeout(sliderDebounceRef.current);
     sliderDebounceRef.current = setTimeout(() => {
-      runSimulationAsync(nextInputs, 'CUSTOM');
+      void runSimulationAsync(nextInputs, 'CUSTOM');
     }, 150);
   }, [runSimulationAsync]);
 
-  // If strategy changes in simulation view, re-run
+  // If strategy changes in simulation view, run only when that strategy is not cached.
   useEffect(() => {
-    if (view === 'SIMULATION') {
-      runSimulationAsync(inputs, selectedStrategy);
+    if (view === 'SIMULATION' && !allResults[selectedStrategy]) {
+      void runSimulationAsync(inputs, selectedStrategy);
     }
-  }, [selectedStrategy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedStrategy, view, inputs, allResults, runSimulationAsync]);
+
+  useEffect(() => {
+    if (selectedResult) {
+      setLastVisibleResults((prev) => ({ ...prev, [selectedStrategy]: selectedResult }));
+    }
+  }, [selectedResult, selectedStrategy]);
+
+  const handleCompareAll = useCallback(async () => {
+    if (compareRunInFlightRef.current) return;
+    compareRunInFlightRef.current = true;
+    const strategies: StrategyType[] = ['BUCKET', 'CONSERVATIVE', 'AGGRESSIVE', 'CUSTOM'];
+    try {
+      for (const strategy of strategies) {
+        if (allResults[strategy]) continue;
+        const ok = await runSimulationAsync(inputs, strategy);
+        if (!ok) break;
+      }
+    } finally {
+      compareRunInFlightRef.current = false;
+    }
+  }, [allResults, inputs, runSimulationAsync]);
 
   useEffect(() => {
     return () => {
@@ -367,15 +396,16 @@ const App: React.FC = () => {
         />
       )}
 
-      {view === 'SIMULATION' && selectedResult && (
+      {view === 'SIMULATION' && renderResult && (
         <SimulationView
           inputs={inputs}
-          results={selectedResult}
+          results={renderResult}
           allResults={allResults}
           selectedStrategy={selectedStrategy}
           setSelectedStrategy={setSelectedStrategy}
+          onCompareAll={handleCompareAll}
           onEdit={() => setView('SETUP')}
-          onRun={() => runSimulationAsync(inputs, selectedStrategy)}
+          onRun={() => { void runSimulationAsync(inputs, selectedStrategy); }}
           onCustomAllocationChange={handleCustomAllocationChange}
           onCustomCashAllocationChange={handleCustomCashAllocationChange}
           isDarkMode={isDarkMode}

@@ -58,6 +58,7 @@ interface SimulationViewProps {
   allResults: Partial<Record<StrategyType, SimulationResult>>;
   selectedStrategy: StrategyType;
   setSelectedStrategy: (s: StrategyType) => void;
+  onCompareAll: () => void;
   onEdit: () => void;
   onRun: () => void;
   onCustomAllocationChange: (alloc: number) => void;
@@ -72,6 +73,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   allResults,
   selectedStrategy,
   setSelectedStrategy,
+  onCompareAll,
   onEdit,
   onRun,
   onCustomAllocationChange,
@@ -597,7 +599,10 @@ ${auditSample}
             <button
               role="tab"
               aria-selected={activeTab === 'COMPARE'}
-              onClick={() => setActiveTab('COMPARE')}
+              onClick={() => {
+                setActiveTab('COMPARE');
+                onCompareAll();
+              }}
               className={`pb-5 text-sm font-medium transition-all border-b-2 ${activeTab === 'COMPARE'
                 ? 'text-slate-900 dark:text-slate-100 border-primary font-bold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 border-transparent'
