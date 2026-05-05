@@ -722,6 +722,16 @@ const generateAuditLog = (
   // made the CWR look artificially low — not because the portfolio is healthy.
   let prevSsIncomeActive = false;
 
+  // SEPP / Rule 72(t) Fixed-Amortization: the dollar amount is locked at plan
+  // inception (year 0) and held constant until age 59½ — IRS rules require that
+  // the chosen Method (Amortization, Annuitization, or RMD) produce a fixed
+  // payment for the duration. Recomputing each year against the live balance
+  // would let the cap float with stochastic returns, contradicting the rule.
+  // We compute it once here from the post-setup Trad + Roth balance.
+  const initialRetirementBalance = (state.stock + state.bond + state.cash)
+    * ((inputs.taxDeferredRatio + inputs.rothRatio) / 100);
+  const seppCapLocked = computeSEPPCap(initialRetirementBalance, inputs.currentAge, inputs.seppRate);
+
   for (let year = 1; year <= inputs.timeHorizon; year++) {
     // Update spend for the current phase (year is 1-based; convert to 0-based for lookup)
     let baseSpend = getSpendingForYear(year - 1, inputs.spendingPhases);
@@ -894,19 +904,23 @@ const generateAuditLog = (
     // distribution that exceeds the SEPP cap (or the entire Trad portion when SEPP
     // isn't used). The penalty must be paid out of the portfolio, so we add it to
     // state.spend so simulateYear withdraws enough to cover it.
-    const totalRetirementBalance = (state.stock + state.bond + state.cash)
-      * ((inputs.taxDeferredRatio + inputs.rothRatio) / 100);
-    const seppCap = computeSEPPCap(totalRetirementBalance, ageThisYear, inputs.seppRate);
-    const earlyPenalty = computeEarlyPenalty(state.spend, ageThisYear, inputs, seppCap);
+    // SEPP cap is the LOCKED inception value (computed once outside the loop) until
+    // 59½, then 0 — Fixed-Amortization rules forbid year-over-year recalculation.
+    const seppCap = ageThisYear >= 59.5 ? 0 : seppCapLocked;
+    let earlyPenalty = computeEarlyPenalty(state.spend, ageThisYear, inputs, seppCap);
     state.spend += earlyPenalty;
 
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight, cash: targetCashWeight });
 
     // When the portfolio is nearly depleted, simulateYear caps actualWithdrawal below
-    // state.spend. Scale taxOwed proportionally so the audit doesn't show more tax
-    // than the fraction of the withdrawal that actually occurred.
+    // state.spend. Scale taxOwed and earlyPenalty proportionally so the audit doesn't
+    // show more tax/penalty than the fraction of the withdrawal that actually occurred.
+    // (Without scaling penalty, "Spend = withdrawal − tax − penalty" can go negative
+    // in the final depletion year.)
     if (state.spend > 0.01 && outcome.withdrawal < state.spend - 0.01) {
-      taxOwed *= outcome.withdrawal / state.spend;
+      const scale = outcome.withdrawal / state.spend;
+      taxOwed *= scale;
+      earlyPenalty *= scale;
     }
 
     // Nominal withdrawal uses the exact cumulative product of stochastic inflation
@@ -1007,6 +1021,14 @@ export const runSimulation = (
   const initializedForThreshold = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, targetCashWeight, initialSpend);
   const startAfterSetup = initializedForThreshold.state.stock + initializedForThreshold.state.bond + initializedForThreshold.state.cash;
   const comfortThreshold = startAfterSetup * 0.25;
+
+  // SEPP / Rule 72(t) Fixed-Amortization cap: locked once at simulation start from
+  // the post-setup Trad+Roth balance. IRS rules forbid year-over-year recalculation
+  // for the Amortization method, so this single value is reused across all 100,000
+  // runs (the inception balance is identical — only future returns differ).
+  const initialRetirementBalanceMC = (initializedForThreshold.state.stock + initializedForThreshold.state.bond + initializedForThreshold.state.cash)
+    * ((inputs.taxDeferredRatio + inputs.rothRatio) / 100);
+  const seppCapLockedMC = computeSEPPCap(initialRetirementBalanceMC, inputs.currentAge, inputs.seppRate);
 
   for (let sim = 0; sim < NUM_SIMULATIONS; sim++) {
     const initialized = initializeStartingState(inputs, strategy, targetStockWeight, targetBondWeight, targetCashWeight, initialSpend);
@@ -1144,13 +1166,11 @@ export const runSimulation = (
       }
 
       // --- Early-withdrawal penalty (Rule 72(t)) — mirrors generateAuditLog. ---
-      // Pre-59½ Traditional draws above the SEPP cap incur a 10% federal penalty
-      // that is paid out of the portfolio. Adding it to state.spend ensures the
-      // simulator actually withdraws enough to cover the penalty.
-      const totalRetirementBalanceMC = (state.stock + state.bond + state.cash)
-        * ((inputs.taxDeferredRatio + inputs.rothRatio) / 100);
-      const seppCapMC = computeSEPPCap(totalRetirementBalanceMC, ageThisYear, inputs.seppRate);
-      state.spend += computeEarlyPenalty(state.spend, ageThisYear, inputs, seppCapMC);
+      // SEPP cap is the LOCKED inception value until 59½, then 0. Pre-59½ Traditional
+      // draws above the cap incur a 10% federal penalty, paid out of the portfolio
+      // (added to state.spend so simulateYear actually withdraws enough to cover it).
+      const seppCapThisYear = ageThisYear >= 59.5 ? 0 : seppCapLockedMC;
+      state.spend += computeEarlyPenalty(state.spend, ageThisYear, inputs, seppCapThisYear);
 
       // generateAnnualReturns now takes nominal assumptions + mean inflation and
       // produces real returns with per-year stochastic inflation baked in.
