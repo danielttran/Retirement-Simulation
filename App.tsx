@@ -125,6 +125,11 @@ const App: React.FC = () => {
       percentileAverage: 50,
       percentileBelowAverage: 25,
       percentileDownturn: 10,
+      // Early-retirement + healthcare defaults (Simple Mode safe).
+      rothRatio: 10,
+      useSEPP: false,
+      seppRate: 5.0,
+      includeHealthcare: false,
     };
 
     const saved = localStorage.getItem('simulationInputs');
@@ -167,6 +172,14 @@ const App: React.FC = () => {
           percentileAverage,
           percentileBelowAverage: Math.max(2, percentileBelowAverage),
           percentileDownturn: Math.max(1, percentileDownturn),
+          // Roth + Traditional combined cap of 100; trim Roth if needed.
+          rothRatio: Math.min(
+            Math.max(0, 100 - clampNumber(merged.taxDeferredRatio, 0, 100, defaults.taxDeferredRatio)),
+            clampNumber(merged.rothRatio, 0, 100, defaults.rothRatio)
+          ),
+          useSEPP: Boolean(merged.useSEPP),
+          seppRate: clampNumber(merged.seppRate, 0, 12, defaults.seppRate),
+          includeHealthcare: Boolean(merged.includeHealthcare),
           spendingPhases: sanitizeSpendingPhases(merged.spendingPhases, safeHorizon),
         };
       } catch (e) {

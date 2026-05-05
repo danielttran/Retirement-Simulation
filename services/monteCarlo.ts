@@ -34,6 +34,68 @@ const RMD_FACTORS: Readonly<Record<number, number>> = {
   98: 7.3, 99: 6.8, 100: 6.4,
 };
 
+// ---------------------------------------------------------------------------
+// SEPP — IRS Single Life Expectancy Table I (2022 update, Pub. 590-B)
+// Used for Rule 72(t) Fixed-Amortization withdrawals. Covers typical early-
+// retirement claim ages (45–60). For ages outside this range we extrapolate:
+// younger → assume same as 45; older falls back to standard RMD logic anyway
+// since SEPP only applies before 59½.
+// ---------------------------------------------------------------------------
+const SINGLE_LIFE_EXP: Readonly<Record<number, number>> = {
+  45: 41.0, 46: 40.0, 47: 39.0, 48: 38.1, 49: 37.1,
+  50: 36.2, 51: 35.3, 52: 34.3, 53: 33.4, 54: 32.5,
+  55: 31.6, 56: 30.6, 57: 29.8, 58: 28.9, 59: 27.9,
+};
+
+/**
+ * IRS Rule 72(t) Fixed-Amortization SEPP cap.
+ * Formula: PMT = PV × r / (1 − (1+r)^−n)  (standard amortization).
+ * Returns 0 for ages ≥ 59½ (rule no longer applies — normal withdrawals allowed).
+ *
+ * @param totalRetirementBalance Combined Traditional + Roth balance at year start.
+ * @param age                    Age at start of this simulation year.
+ * @param seppRatePct            Interest rate (capped at 120% AFR by IRS).
+ */
+function computeSEPPCap(totalRetirementBalance: number, age: number, seppRatePct: number): number {
+  if (age >= 59.5 || totalRetirementBalance <= 0) return 0;
+  const n = SINGLE_LIFE_EXP[Math.min(59, Math.max(45, Math.floor(age)))] ?? 36.2;
+  const r = seppRatePct / 100;
+  if (r <= 0) return totalRetirementBalance / n;
+  return totalRetirementBalance * (r / (1 - Math.pow(1 + r, -n)));
+}
+
+/**
+ * Healthcare expense add-on (real / today's $). Returns 0 when disabled.
+ * Pre-65: ~$8k/yr (private insurance / ACA marketplace bridge).
+ * Post-65: ~$7k/yr (Medicare Part B+D premiums + supplemental + OOP).
+ * Grows at ~2.5%/yr in real terms (medical CPI runs ~2.5% above general CPI).
+ */
+function getHealthcareSpend(age: number, include: boolean, yearIdx: number): number {
+  if (!include) return 0;
+  const base = age < 65 ? 8000 : 7000;
+  return base * Math.pow(1.025, Math.max(0, yearIdx));
+}
+
+/**
+ * 10% IRS early-withdrawal penalty for retirement-account distributions before
+ * age 59½. Applied to the Traditional (taxable) portion of the withdrawal that
+ * exceeds the SEPP cap when SEPP is active, or the entire Trad portion when
+ * SEPP is not used. Roth contributions are penalty-free regardless and are
+ * approximated as fully sheltered. Returns 0 for ages ≥ 59½.
+ */
+function computeEarlyPenalty(
+  grossWithdrawal: number,
+  age: number,
+  inputs: SimulationInputs,
+  seppCap: number
+): number {
+  if (age >= 59.5 || grossWithdrawal <= 0 || inputs.taxDeferredRatio <= 0) return 0;
+  const tradPortion = grossWithdrawal * (inputs.taxDeferredRatio / 100);
+  const shielded = inputs.useSEPP ? Math.min(seppCap, tradPortion) : 0;
+  const exposed = Math.max(0, tradPortion - shielded);
+  return exposed * 0.10;
+}
+
 /**
  * Computes the IRS-required minimum distribution in real (today's) dollars.
  */
@@ -68,7 +130,7 @@ function computeFirstYearGrossedUpSpend(
   inputs: SimulationInputs
 ): number {
   const ageAtYear1 = inputs.currentAge + 1;
-  let baseSpend = rawSpend;
+  let baseSpend = rawSpend + getHealthcareSpend(ageAtYear1, inputs.includeHealthcare, 0);
 
   const taxRate = inputs.withdrawalTaxRate / 100;
   const effTaxRate = taxRate * (inputs.taxDeferredRatio / 100);
@@ -672,6 +734,12 @@ const generateAuditLog = (
     // 1. RMD: compute IRS-mandated minimum withdrawal for this year.
     const ageThisYear = inputs.currentAge + year;
 
+    // Healthcare add-on: applied AFTER phase-change detection so it doesn't trip
+    // false G-K phase resets, but BEFORE SS offset / tax gross-up so it's properly
+    // taxed and grossed up like any other real spending.
+    const healthcareSpend = getHealthcareSpend(ageThisYear, inputs.includeHealthcare, year - 1);
+    baseSpend += healthcareSpend;
+
     // Capture SS/pension income before deducting it from baseSpend so we can
     // report the offset explicitly in the audit row (ssIncome column).
     const ssIncomeThisYear = ageThisYear >= inputs.socialSecurityAge
@@ -821,6 +889,17 @@ const generateAuditLog = (
     // by generateAnnualReturns(dynamicAssumptions, ...) in runSimulation, so the audit
     // rows reflect the user's expectedStockReturn automatically via the stored returns.
 
+    // --- Early-withdrawal penalty (IRS Rule 72(t)) ---
+    // Pre-59½: 10% federal penalty on the Traditional IRA/401(k) portion of any
+    // distribution that exceeds the SEPP cap (or the entire Trad portion when SEPP
+    // isn't used). The penalty must be paid out of the portfolio, so we add it to
+    // state.spend so simulateYear withdraws enough to cover it.
+    const totalRetirementBalance = (state.stock + state.bond + state.cash)
+      * ((inputs.taxDeferredRatio + inputs.rothRatio) / 100);
+    const seppCap = computeSEPPCap(totalRetirementBalance, ageThisYear, inputs.seppRate);
+    const earlyPenalty = computeEarlyPenalty(state.spend, ageThisYear, inputs, seppCap);
+    state.spend += earlyPenalty;
+
     const outcome = simulateYear(state, returns, inputs, strategy, { stock: targetStockWeight, bond: targetBondWeight, cash: targetCashWeight });
 
     // When the portfolio is nearly depleted, simulateYear caps actualWithdrawal below
@@ -859,6 +938,9 @@ const generateAuditLog = (
       ssIncome: ssIncomeThisYear,
       spendMultiplier: state.spendMultiplier, // current accumulated G-K factor this year
       crashed: returns.crashed,        // jump-diffusion flag for audit annotation
+      seppCap,                              // 0 once age ≥ 59½
+      earlyPenalty,                         // 0 once age ≥ 59½ or no Trad balance
+      healthcareSpend,                      // 0 when includeHealthcare is false
     });
 
     // Compute total portfolio return for this year so the NEXT year's G-K direction
@@ -959,6 +1041,10 @@ export const runSimulation = (
       // same retirement year (avoids a 1-year RMD trigger discrepancy).
       const ageThisYear = inputs.currentAge + year + 1;
 
+      // Healthcare add-on (real $). Mirrors generateAuditLog: applied AFTER phase
+      // detection so it doesn't trip false G-K resets, but BEFORE SS / tax gross-up.
+      baseSpend += getHealthcareSpend(ageThisYear, inputs.includeHealthcare, year);
+
       // Supplemental Income offsets need for portfolio withdrawals.
       // Also detect first SS activation for G-K IWR baseline reset (mirrors generateAuditLog).
       const ssActive = ageThisYear >= inputs.socialSecurityAge;
@@ -1056,6 +1142,15 @@ export const runSimulation = (
           state.gkFiredLastYear = false;
         }
       }
+
+      // --- Early-withdrawal penalty (Rule 72(t)) — mirrors generateAuditLog. ---
+      // Pre-59½ Traditional draws above the SEPP cap incur a 10% federal penalty
+      // that is paid out of the portfolio. Adding it to state.spend ensures the
+      // simulator actually withdraws enough to cover the penalty.
+      const totalRetirementBalanceMC = (state.stock + state.bond + state.cash)
+        * ((inputs.taxDeferredRatio + inputs.rothRatio) / 100);
+      const seppCapMC = computeSEPPCap(totalRetirementBalanceMC, ageThisYear, inputs.seppRate);
+      state.spend += computeEarlyPenalty(state.spend, ageThisYear, inputs, seppCapMC);
 
       // generateAnnualReturns now takes nominal assumptions + mean inflation and
       // produces real returns with per-year stochastic inflation baked in.

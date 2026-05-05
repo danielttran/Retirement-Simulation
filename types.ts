@@ -34,6 +34,21 @@ export interface SimulationInputs {
   percentileAverage: number;       // 1–99, shown as the green "Average Market" line
   percentileBelowAverage: number;  // 1–99, shown as the gold "Below Average" line
   percentileDownturn: number;      // 1–99, shown as the red "Downturn" line
+
+  // --- Early Retirement: SEPP / IRS Rule 72(t) ---
+  /** % of investable assets in Roth IRA / Roth 401(k). taxDeferredRatio + rothRatio
+   *  must be ≤ 100; remainder is taxable brokerage. SEPP applies to Traditional + Roth
+   *  combined; Roth contributions are penalty-free even outside SEPP. */
+  rothRatio: number;
+  /** Simulate IRS Rule 72(t) Substantially Equal Periodic Payments — penalty-free
+   *  withdrawals from retirement accounts before age 59½ up to a computed cap. */
+  useSEPP: boolean;
+  /** Interest rate for the Fixed-Amortization SEPP formula. IRS caps at 120% of
+   *  the federal mid-term AFR; ~5.0% is a current proxy. */
+  seppRate: number;
+  /** Auto-add inflation-adjusted healthcare expenses: ~$8k/yr pre-65 (Medicare gap),
+   *  ~$7k/yr post-65 (Medicare + supplemental), inflated at medical CPI ~5.5%. */
+  includeHealthcare: boolean;
 }
 
 export type StrategyType = 'BUCKET' | 'CONSERVATIVE' | 'AGGRESSIVE' | 'CUSTOM';
@@ -74,6 +89,13 @@ export interface AuditRow {
   spendMultiplier: number;
   /** True when a jump-diffusion (Merton) crash event fired this year (2 % annual probability). */
   crashed: boolean;
+  /** Annual SEPP cap (Rule 72(t) Fixed-Amortization). 0 if SEPP inactive this year. */
+  seppCap: number;
+  /** Penalty paid this year for early-withdrawal violations (10% of taxable overage
+   *  before age 59½ when SEPP is not used or its cap is breached). */
+  earlyPenalty: number;
+  /** Healthcare expense added to baseSpend this year (today's $) when includeHealthcare. */
+  healthcareSpend: number;
 }
 
 export interface SimulationResult {
