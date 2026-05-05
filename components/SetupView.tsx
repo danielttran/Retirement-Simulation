@@ -345,11 +345,10 @@ interface SimpleFormProps {
   onRun: (inputs: SimulationInputs) => void;
   onSwitchToAdvanced: () => void;
   hasResult?: boolean;
-  isChanged: boolean;
   onShowResult?: () => void;
 }
 
-const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSwitchToAdvanced, hasResult, isChanged, onShowResult }) => {
+const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSwitchToAdvanced, hasResult, onShowResult }) => {
   // Derive simple-mode initial values from existing inputs so toggling Advanced ↔
   // Simple round-trips reasonably. Spending = sum of phase 1 amount / 12.
   const init = defaultInputs;
@@ -374,9 +373,6 @@ const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSw
 
   const handleRun = () => {
     const annual = monthlySpend * 12;
-    // 95 % stocks-only-risk allocation default for fixed-mix strategies in Simple Mode
-    // is unnecessary because BUCKET is the default selected strategy and uses its own
-    // sizing logic. Use safe centrist values for the other knobs.
     const merged: SimulationInputs = {
       ...defaultInputs,
       currentAge: retirementAge,
@@ -404,7 +400,11 @@ const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSw
       seppRate: 5.0,
       includeHealthcare,
     };
-    if (hasResult && !isChanged && onShowResult) {
+    // Compute isChanged against the current parent defaults rather than relying on
+    // the parent's prop — Simple Mode keeps its own internal state (sliders/inputs)
+    // so the parent's isChanged flag never reflects Simple Mode edits.
+    const simpleIsChanged = JSON.stringify(merged) !== JSON.stringify(defaultInputs);
+    if (hasResult && !simpleIsChanged && onShowResult) {
       onShowResult();
     } else {
       onRun(merged);
@@ -412,6 +412,26 @@ const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSw
   };
 
   const valid = savings > 0 && monthlySpend > 0 && retirementAge >= 25 && retirementAge <= 85;
+
+  // Same merged-vs-default check as in handleRun, so the button label correctly
+  // reads "Show Result" only when the user truly hasn't changed anything from the
+  // last run. Cheap (small object, runs only on render).
+  const previewMerged = {
+    ...defaultInputs,
+    currentAge: retirementAge,
+    birthYear: new Date().getFullYear() - retirementAge,
+    timeHorizon: horizon,
+    initialCash: Math.round(savings * 0.10),
+    initialInvestments: Math.round(savings * 0.90),
+    spendingPhases: [{ id: 1, startYear: 0, endYear: horizon, annualSpend: monthlySpend * 12 }],
+    socialSecurityIncome: ssMonthly,
+    socialSecurityAge: ssAge,
+    taxDeferredRatio,
+    rothRatio,
+    useSEPP: isEarly && useSEPP,
+    includeHealthcare,
+  };
+  const labelIsChanged = JSON.stringify(previewMerged) !== JSON.stringify(defaultInputs);
 
   return (
     <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 p-12 transition-all">
@@ -537,7 +557,7 @@ const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSw
             ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
             : 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-600 cursor-not-allowed'}`}
         >
-          {hasResult && !isChanged ? 'Show Result' : 'Run Simulation'}
+          {hasResult && !labelIsChanged ? 'Show Result' : 'Run Simulation'}
         </button>
         <p className="mt-5 text-[10px] font-semibold text-slate-300 dark:text-slate-600 uppercase tracking-wider">
           Tested across 100,000 possible market futures
@@ -715,7 +735,6 @@ const SetupView: React.FC<SetupViewProps> = ({
             onRun={onRun}
             onSwitchToAdvanced={() => setMode('advanced')}
             hasResult={hasResult}
-            isChanged={isChanged}
             onShowResult={onShowResult}
           />
         </main>

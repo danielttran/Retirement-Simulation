@@ -105,7 +105,7 @@ const SimulationView: React.FC<SimulationViewProps> = ({
   const aiPromptText = useMemo(() => {
     const auditRows = results.auditLogAverage;
     const auditSample = auditRows.slice(0, 10).map(r =>
-      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round((r.startCash ?? 0) + (r.startStock ?? 0) + (r.startBond ?? 0)).toLocaleString()} | Stock ${((r.stockReturn ?? 0) * 100).toFixed(1)}% Bond ${((r.bondReturn ?? 0) * 100).toFixed(1)}% Infl ${((r.realizedInflation ?? 0) * 100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount ?? 0).toLocaleString()} | Fees -$${Math.round(r.feesAmount ?? 0).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal ?? 0).toLocaleString()} (Tax -$${Math.round(r.taxPaid ?? 0).toLocaleString()}) | SS +$${Math.round(r.ssIncome ?? 0).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount ?? 0).toLocaleString()} | End $${Math.round(r.endTotal ?? 0).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
+      `  Yr ${r.year} | Age ${inputs.currentAge + (r.year - startYear)} | Start $${Math.round((r.startCash ?? 0) + (r.startStock ?? 0) + (r.startBond ?? 0)).toLocaleString()} | Stock ${((r.stockReturn ?? 0) * 100).toFixed(1)}% Bond ${((r.bondReturn ?? 0) * 100).toFixed(1)}% Infl ${((r.realizedInflation ?? 0) * 100).toFixed(1)}% | Growth ${r.growthAmount >= 0 ? '+' : ''}$${Math.round(r.growthAmount ?? 0).toLocaleString()} | Fees -$${Math.round(r.feesAmount ?? 0).toLocaleString()} | Withdrawal -$${Math.round(r.withdrawal ?? 0).toLocaleString()} (Tax -$${Math.round(r.taxPaid ?? 0).toLocaleString()}${(r.earlyPenalty ?? 0) > 0.5 ? `, Penalty -$${Math.round(r.earlyPenalty).toLocaleString()}` : ''}) | SS +$${Math.round(r.ssIncome ?? 0).toLocaleString()} | RMD floor $${Math.round(r.rmdAmount ?? 0).toLocaleString()}${(r.seppCap ?? 0) > 0 ? ` | SEPP cap $${Math.round(r.seppCap).toLocaleString()}` : ''}${(r.healthcareSpend ?? 0) > 0.5 ? ` | HC $${Math.round(r.healthcareSpend).toLocaleString()}` : ''} | End $${Math.round(r.endTotal ?? 0).toLocaleString()}${r.crashed ? ' [CRASH EVENT]' : ''}${r.gkEvent ? ` [GK: ${r.gkEvent}]` : ''}`
     ).join('\n');
 
     return `Retirement Simulation Validation Request
@@ -1266,13 +1266,21 @@ ${auditSample}
                           </td>
                           <td className="px-4 py-4 font-medium text-slate-600 dark:text-slate-400 transition-colors">
                             <div>
-                              Spend: -${(row.withdrawal - row.taxPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              {/* Spend = withdrawal minus tax AND early-withdrawal penalty so the
+                                  displayed "Spend" reflects the actual real-life cost-of-living
+                                  amount, not the inflated gross draw. */}
+                              Spend: -${(row.withdrawal - row.taxPaid - row.earlyPenalty).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
                             {/* Tax line — grey when $0, red when positive — lets users verify
                                 the tax gross-up is being applied for all strategies. */}
                             <div className={row.taxPaid > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'}>
                               Tax: {row.taxPaid > 0 ? `-$${row.taxPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '$0'}
                             </div>
+                            {row.earlyPenalty > 0.5 && (
+                              <div className="text-red-600 dark:text-red-400">
+                                Early Penalty: -${row.earlyPenalty.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            )}
                             <div className="font-bold border-t border-slate-200 dark:border-slate-700 mt-1 pt-1 text-slate-800 dark:text-slate-200">
                               Total Draw: {row.withdrawal < 0 ? '+' : '-'}${Math.abs(row.withdrawal).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
