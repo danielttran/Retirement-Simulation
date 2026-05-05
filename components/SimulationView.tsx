@@ -1296,6 +1296,24 @@ ${auditSample}
                                 )}
                               </div>
                             )}
+                            {row.seppCap > 0 && (
+                              <div className="mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                                <span className="material-symbols-outlined text-xs leading-none">lock_open</span>
+                                SEPP cap: ${Math.round(row.seppCap).toLocaleString()}/yr
+                              </div>
+                            )}
+                            {row.earlyPenalty > 0.5 && (
+                              <div className="mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
+                                <span className="material-symbols-outlined text-xs leading-none">warning</span>
+                                10% penalty: -${Math.round(row.earlyPenalty).toLocaleString()}
+                              </div>
+                            )}
+                            {row.healthcareSpend > 0.5 && (
+                              <div className="mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 uppercase tracking-wide bg-pink-50 dark:bg-pink-950/30 text-pink-700 dark:text-pink-400 border-pink-200 dark:border-pink-800">
+                                <span className="material-symbols-outlined text-xs leading-none">medical_services</span>
+                                Healthcare: ${Math.round(row.healthcareSpend).toLocaleString()}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-4 font-bold text-slate-800 dark:text-slate-200 transition-colors">
                             ${row.endTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}

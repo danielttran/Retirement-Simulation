@@ -334,6 +334,219 @@ function syncPhasesToHorizon(phases: SpendingPhase[], horizon: number): Spending
   return updated;
 }
 
+// ─── Simple Mode Form ─────────────────────────────────────────────────────────
+// A 3-question form for regular people. Maps onto the full SimulationInputs via
+// smart defaults — preserves the engine's full accuracy without exposing 20+ knobs.
+// Simulation starts AT the user's retirement day, so currentAge = retirementAge
+// and birthYear is back-calculated to keep RMD-age math consistent.
+
+interface SimpleFormProps {
+  defaultInputs: SimulationInputs;
+  onRun: (inputs: SimulationInputs) => void;
+  onSwitchToAdvanced: () => void;
+  hasResult?: boolean;
+  isChanged: boolean;
+  onShowResult?: () => void;
+}
+
+const SimpleSetupForm: React.FC<SimpleFormProps> = ({ defaultInputs, onRun, onSwitchToAdvanced, hasResult, isChanged, onShowResult }) => {
+  // Derive simple-mode initial values from existing inputs so toggling Advanced ↔
+  // Simple round-trips reasonably. Spending = sum of phase 1 amount / 12.
+  const init = defaultInputs;
+  const [retirementAge, setRetirementAge] = useState<number>(Math.max(40, init.currentAge));
+  const [savings, setSavings] = useState<number>(init.initialCash + init.initialInvestments);
+  const [monthlySpend, setMonthlySpend] = useState<number>(
+    Math.round(((init.spendingPhases[0]?.annualSpend) || 60000) / 12)
+  );
+  const [ssMonthly, setSsMonthly] = useState<number>(init.socialSecurityIncome || 1900);
+  const [ssAge, setSsAge] = useState<number>(init.socialSecurityAge);
+  const [useSEPP, setUseSEPP] = useState<boolean>(init.useSEPP || retirementAge < 59);
+  const [includeHealthcare, setIncludeHealthcare] = useState<boolean>(init.includeHealthcare ?? true);
+
+  const isEarly = retirementAge < 59.5;
+  const horizon = Math.max(5, Math.min(50, 95 - retirementAge));
+
+  // Smart default Trad/Roth split: older retirees skew more Traditional (401(k)
+  // history), younger ones tilt slightly more Roth as those vehicles only matured
+  // in the last ~25 years. These are coarse but realistic for regular-person mode.
+  const taxDeferredRatio = retirementAge >= 60 ? 80 : 70;
+  const rothRatio = retirementAge >= 60 ? 10 : 15;
+
+  const handleRun = () => {
+    const annual = monthlySpend * 12;
+    // 95 % stocks-only-risk allocation default for fixed-mix strategies in Simple Mode
+    // is unnecessary because BUCKET is the default selected strategy and uses its own
+    // sizing logic. Use safe centrist values for the other knobs.
+    const merged: SimulationInputs = {
+      ...defaultInputs,
+      currentAge: retirementAge,
+      birthYear: new Date().getFullYear() - retirementAge,
+      timeHorizon: horizon,
+      // Single phase covering full horizon. Cash split 10% / Investments 90%.
+      initialCash: Math.round(savings * 0.10),
+      initialInvestments: Math.round(savings * 0.90),
+      spendingPhases: [{ id: 1, startYear: 0, endYear: horizon, annualSpend: annual }],
+      socialSecurityIncome: ssMonthly,
+      socialSecurityAge: ssAge,
+      taxDeferredRatio,
+      rothRatio,
+      withdrawalTaxRate: 22,
+      inflationRate: 3.0,
+      expectedStockReturn: 8.5,
+      expectedBondReturn: 4.0,
+      expectedCashReturn: 2.5,
+      expectedStockVolatility: 17.0,
+      managementFee: 0.10,
+      percentileAverage: 50,
+      percentileBelowAverage: 25,
+      percentileDownturn: 10,
+      useSEPP: isEarly && useSEPP,
+      seppRate: 5.0,
+      includeHealthcare,
+    };
+    if (hasResult && !isChanged && onShowResult) {
+      onShowResult();
+    } else {
+      onRun(merged);
+    }
+  };
+
+  const valid = savings > 0 && monthlySpend > 0 && retirementAge >= 25 && retirementAge <= 85;
+
+  return (
+    <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.05)] border border-slate-100 dark:border-slate-800 p-12 transition-all">
+      <div className="flex items-center justify-between mb-10">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Quick Plan</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Three questions. We handle the rest.</p>
+        </div>
+        <button
+          onClick={onSwitchToAdvanced}
+          className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
+        >
+          Switch to Advanced →
+        </button>
+      </div>
+
+      {/* Step 1 — About You */}
+      <section className="mb-10">
+        <h3 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">1. When will you retire?</h3>
+        <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5">
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-3">Retirement age</label>
+          <div className="flex items-center gap-4">
+            <input type="range" min={40} max={75} value={retirementAge}
+              onChange={(e) => setRetirementAge(parseInt(e.target.value))}
+              className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg cursor-pointer" />
+            <span className="text-xl font-bold text-slate-900 dark:text-slate-100 w-12 text-right">{retirementAge}</span>
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">
+            Simulation starts on your retirement day and runs to age 95 ({horizon}-year horizon).
+            {isEarly && <span className="text-amber-600 dark:text-amber-400 font-medium"> ⚠ Retiring before 59½ — see SEPP option below.</span>}
+          </p>
+        </div>
+      </section>
+
+      {/* Step 2 — Your Money */}
+      <section className="mb-10">
+        <h3 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">2. The money</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-3">
+              Total savings at retirement
+            </label>
+            <CurrencyInput value={savings} onChange={setSavings} prefix="$" suffix="USD" />
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-relaxed">
+              All accounts combined: 401(k), IRA, Roth, brokerage, savings. We auto-split {taxDeferredRatio}% Traditional / {rothRatio}% Roth / {100 - taxDeferredRatio - rothRatio}% taxable.
+            </p>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-3">
+              Monthly spending in retirement
+            </label>
+            <CurrencyInput value={monthlySpend} onChange={setMonthlySpend} prefix="$" suffix="/mo" />
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 leading-relaxed">
+              Today's dollars. We adjust for inflation automatically. ${(monthlySpend * 12).toLocaleString()}/yr.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Step 3 — Social Security */}
+      <section className="mb-10">
+        <h3 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">3. Social Security</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-3">Expected monthly benefit</label>
+            <CurrencyInput value={ssMonthly} onChange={setSsMonthly} prefix="$" suffix="/mo" />
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">
+              U.S. average ≈ $1,900/mo. Check ssa.gov for your estimate, or just use the default.
+            </p>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-3">Claiming age</label>
+            <div className="flex items-center gap-4">
+              <input type="range" min={62} max={70} value={ssAge}
+                onChange={(e) => setSsAge(parseInt(e.target.value))}
+                className="w-full h-1 bg-slate-200 dark:bg-slate-700 accent-primary rounded-lg cursor-pointer" />
+              <span className="text-xl font-bold text-slate-900 dark:text-slate-100 w-10 text-right">{ssAge}</span>
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">
+              Each year you delay past 67 adds ~8% to your monthly check (up to age 70).
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Optional toggles */}
+      <section className="mb-10 space-y-3">
+        {isEarly && (
+          <label className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/40 rounded-xl cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors">
+            <input type="checkbox" checked={useSEPP} onChange={(e) => setUseSEPP(e.target.checked)}
+              className="mt-1 accent-amber-600" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Set up SEPP (Rule 72(t)) — avoid 10% early-withdrawal penalty
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                Lets you tap your 401(k)/IRA/Roth before 59½ penalty-free using IRS-approved Substantially Equal Periodic Payments.
+                Locked in until 59½. Withdrawals above the SEPP cap still incur the 10% penalty.
+              </p>
+            </div>
+          </label>
+        )}
+        <label className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors">
+          <input type="checkbox" checked={includeHealthcare} onChange={(e) => setIncludeHealthcare(e.target.checked)}
+            className="mt-1 accent-primary" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Include realistic healthcare costs
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Adds ~$8,000/yr before age 65 (private insurance / ACA bridge) and ~$7,000/yr after (Medicare + supplemental).
+              Inflated at medical CPI (~5.5%/yr). The #1 expense regular people forget.
+            </p>
+          </div>
+        </label>
+      </section>
+
+      <div className="flex flex-col items-center">
+        <button
+          onClick={handleRun}
+          disabled={!valid}
+          className={`w-full sm:w-auto px-20 py-5 rounded-lg font-bold text-sm uppercase tracking-wider transition-all shadow-xl ${valid
+            ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
+            : 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-600 cursor-not-allowed'}`}
+        >
+          {hasResult && !isChanged ? 'Show Result' : 'Run Simulation'}
+        </button>
+        <p className="mt-5 text-[10px] font-semibold text-slate-300 dark:text-slate-600 uppercase tracking-wider">
+          Tested across 100,000 possible market futures
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main SetupView ───────────────────────────────────────────────────────────
 
 const SetupView: React.FC<SetupViewProps> = ({
@@ -344,6 +557,12 @@ const SetupView: React.FC<SetupViewProps> = ({
   hasResult,
   onShowResult
 }) => {
+  const [mode, setMode] = useState<'simple' | 'advanced'>(() => {
+    const saved = localStorage.getItem('setupMode');
+    return saved === 'advanced' ? 'advanced' : 'simple';
+  });
+  useEffect(() => { localStorage.setItem('setupMode', mode); }, [mode]);
+
   const [formState, setFormState] = useState<SimulationInputs>(defaultInputs);
 
   useEffect(() => {
@@ -411,6 +630,12 @@ const SetupView: React.FC<SetupViewProps> = ({
 
     if (formState.taxDeferredRatio < 0 || formState.taxDeferredRatio > 100)
       errors.push('Tax-deferred ratio must be 0–100%.');
+    if (formState.rothRatio < 0 || formState.rothRatio > 100)
+      errors.push('Roth ratio must be 0–100%.');
+    if (formState.taxDeferredRatio + formState.rothRatio > 100)
+      errors.push('Tax-deferred + Roth ratio must total ≤ 100% (remainder is taxable brokerage).');
+    if (!isFinite(formState.seppRate) || formState.seppRate < 0 || formState.seppRate > 12)
+      errors.push('SEPP rate must be 0–12%.');
     if (formState.withdrawalTaxRate < 0 || formState.withdrawalTaxRate > 60)
       errors.push('Withdrawal tax rate must be 0–60%.');
     if (formState.socialSecurityAge < 50 || formState.socialSecurityAge > 85)
@@ -447,6 +672,57 @@ const SetupView: React.FC<SetupViewProps> = ({
     }
   };
 
+  // Shared chrome (header + dark-mode toggle) wraps either form variant.
+  const chromeHeader = (
+    <nav className="border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors">
+      <div className="max-w-7xl mx-auto px-8 h-20 flex items-center justify-between">
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary/20 dark:bg-primary/10 flex items-center justify-center rounded transition-colors">
+              <span className="material-symbols-outlined text-primary text-xl">account_balance_wallet</span>
+            </div>
+            <span className="text-sm font-bold tracking-widest uppercase text-slate-800 dark:text-slate-100">Strategy Lab</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-8">
+          <button
+            onClick={onToggleDarkMode}
+            className="w-10 h-10 bg-slate-50 dark:bg-slate-800 flex items-center justify-center rounded-xl shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700"
+            aria-label="Toggle theme"
+          >
+            <span className="material-symbols-outlined text-slate-600 dark:text-slate-400 text-xl">
+              {isDarkMode ? 'light_mode' : 'dark_mode'}
+            </span>
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+
+  if (mode === 'simple') {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark animate-fade-in transition-colors duration-300">
+        {chromeHeader}
+        <main className="max-w-7xl mx-auto px-8 py-16">
+          <div className="max-w-2xl mx-auto text-center mb-12">
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-4">Will my retirement plan work?</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-light leading-relaxed">
+              Answer three quick questions and we'll test your plan against 100,000 possible market futures — including crashes, inflation, taxes, and IRS rules.
+            </p>
+          </div>
+          <SimpleSetupForm
+            defaultInputs={defaultInputs}
+            onRun={onRun}
+            onSwitchToAdvanced={() => setMode('advanced')}
+            hasResult={hasResult}
+            isChanged={isChanged}
+            onShowResult={onShowResult}
+          />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark animate-fade-in transition-colors duration-300">
       <nav className="border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors">
@@ -458,6 +734,12 @@ const SetupView: React.FC<SetupViewProps> = ({
               </div>
               <span className="text-sm font-bold tracking-widest uppercase text-slate-800 dark:text-slate-100">Strategy Lab</span>
             </div>
+            <button
+              onClick={() => setMode('simple')}
+              className="ml-4 text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors"
+            >
+              ← Back to Simple
+            </button>
           </div>
           <div className="flex items-center gap-8">
             <button
@@ -703,6 +985,73 @@ const SetupView: React.FC<SetupViewProps> = ({
                   Your expected income tax rate on pre-tax account withdrawals. Only the pre-tax portion (set above) is taxed &mdash; e.g., if 60% is in a Traditional IRA and your rate is 22%, the blended drag is 13.2% of all withdrawals. Typical range: 10&ndash;32%. Maximum allowed: 60% (extreme edge case for large distributions).
                 </p>
               </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                  % Held in Roth Accounts (Roth IRA / Roth 401k)
+                </label>
+                <CurrencyInput
+                  value={formState.rothRatio}
+                  onChange={(v) => updateField('rothRatio', Math.min(100 - formState.taxDeferredRatio, Math.max(0, v)))}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                  Already-taxed retirement assets. Withdrawals are tax-free. Combined with Pre-Tax must be &le; 100%; remainder is treated as taxable brokerage. SEPP / Rule 72(t) applies to <em>both</em> Traditional and Roth balances combined.
+                </p>
+              </div>
+
+              {/* ── Early Retirement & Healthcare ─────────────────────── */}
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-2 mb-6 transition-colors mt-8">
+                Early Retirement &amp; Healthcare
+              </h3>
+
+              <label className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/40 rounded-xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formState.useSEPP}
+                  onChange={(e) => setFormState(prev => ({ ...prev, useSEPP: e.target.checked }))}
+                  className="mt-1 accent-amber-600"
+                />
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Enable SEPP / Rule 72(t)
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    Penalty-free withdrawals from retirement accounts before age 59½ via the Fixed-Amortization method. Required if you retire early and need to draw from your 401(k)/IRA/Roth. Withdrawals above the SEPP cap incur the 10% federal early-withdrawal penalty.
+                  </p>
+                </div>
+              </label>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 transition-colors">
+                  SEPP Interest Rate (Fixed Amortization)
+                </label>
+                <CurrencyInput
+                  value={formState.seppRate}
+                  onChange={(v) => updateField('seppRate', Math.min(12, Math.max(0, v)))}
+                  suffix="%"
+                />
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 transition-colors">
+                  IRS caps this at 120% of the federal mid-term Applicable Federal Rate (AFR). ~5.0% is a current proxy. Higher rate ⇒ larger annual SEPP cap.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formState.includeHealthcare}
+                  onChange={(e) => setFormState(prev => ({ ...prev, includeHealthcare: e.target.checked }))}
+                  className="mt-1 accent-primary"
+                />
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Include Realistic Healthcare Costs
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    Adds ~$8,000/yr before age 65 (private insurance / ACA bridge) and ~$7,000/yr after 65 (Medicare Part B+D + supplemental + OOP), inflated at medical CPI (~2.5% above general CPI). The largest expense category most retirees underestimate.
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
 
